@@ -15,33 +15,25 @@ jobs:
           # Windows PowerShell 5.1
           - os: windows-latest
             powershell-version: "5.1"
-            shell: "powershell"
+            shell-type: "powershell"
           # Windows PowerShell 7.x
           - os: windows-latest
             powershell-version: "7.4"
-            shell: "pwsh"
+            shell-type: "pwsh"
           # Ubuntu PowerShell 7.x
           - os: ubuntu-latest
             powershell-version: "7.4"
-            shell: "pwsh"
+            shell-type: "pwsh"
           # macOS PowerShell 7.x
           - os: macos-latest
             powershell-version: "7.4"
-            shell: "pwsh"
+            shell-type: "pwsh"
 
     runs-on: ${{ matrix.os }}
 
     steps:
     - name: Checkout repository
       uses: actions/checkout@v4
-
-    - name: Setup PowerShell Core (Non-Windows)
-      if: matrix.os != 'windows-latest'
-      uses: azure/powershell@v2
-      with:
-        azPSVersion: "latest"
-        inlineScript: |
-          Write-Host "PowerShell version: $($PSVersionTable.PSVersion)"
 
     - name: Install PowerShell Core (Ubuntu)
       if: matrix.os == 'ubuntu-latest'
@@ -59,25 +51,29 @@ jobs:
         brew install --cask powershell
         pwsh --version
 
-    - name: Verify PowerShell Installation
-      shell: ${{ matrix.shell }}
+    - name: Verify PowerShell Installation (PowerShell 5.1)
+      if: matrix.powershell-version == '5.1'
+      shell: powershell
       run: |
         Write-Host "PowerShell version: $($PSVersionTable.PSVersion)"
         Write-Host "PowerShell edition: $($PSVersionTable.PSEdition)"
         Write-Host "Platform: $($PSVersionTable.Platform)"
 
-    - name: Install Pester
-      shell: ${{ matrix.shell }}
+    - name: Verify PowerShell Installation (PowerShell Core)
+      if: matrix.powershell-version != '5.1'
+      shell: pwsh
+      run: |
+        Write-Host "PowerShell version: $($PSVersionTable.PSVersion)"
+        Write-Host "PowerShell edition: $($PSVersionTable.PSEdition)"
+        Write-Host "Platform: $($PSVersionTable.Platform)"
+
+    - name: Install Pester (PowerShell 5.1)
+      if: matrix.powershell-version == '5.1'
+      shell: powershell
       run: |
         try {
-          if ($PSVersionTable.PSVersion.Major -ge 6) {
-            Write-Host "Installing Pester for PowerShell Core..."
-            Install-Module -Name Pester -Force -SkipPublisherCheck -Scope CurrentUser -AllowClobber
-          } else {
-            Write-Host "Installing Pester for PowerShell 5.1..."
-            # For PowerShell 5.1, install latest compatible version
-            Install-Module -Name Pester -Force -SkipPublisherCheck -Scope CurrentUser -AllowClobber
-          }
+          Write-Host "Installing Pester for PowerShell 5.1..."
+          Install-Module -Name Pester -Force -SkipPublisherCheck -Scope CurrentUser -AllowClobber
 
           $PesterVersion = Get-Module -ListAvailable -Name Pester | Select-Object -First 1 -ExpandProperty Version
           Write-Host "Pester version installed: $PesterVersion"
@@ -87,17 +83,45 @@ jobs:
           exit 1
         }
 
-    - name: Install SQLite Dependencies
-      shell: ${{ matrix.shell }}
+    - name: Install Pester (PowerShell Core)
+      if: matrix.powershell-version != '5.1'
+      shell: pwsh
       run: |
         try {
-          if ($PSVersionTable.PSVersion.Major -ge 6) {
-            Write-Host "Installing SQLite dependencies for PowerShell Core..."
-            # Try to install PSSQLite for cross-platform compatibility
-            Install-Module -Name PSSQLite -Force -SkipPublisherCheck -Scope CurrentUser -ErrorAction SilentlyContinue
-          } else {
-            Write-Host "PowerShell 5.1 - using built-in System.Data.SQLite support"
-          }
+          Write-Host "Installing Pester for PowerShell Core..."
+          Install-Module -Name Pester -Force -SkipPublisherCheck -Scope CurrentUser -AllowClobber
+
+          $PesterVersion = Get-Module -ListAvailable -Name Pester | Select-Object -First 1 -ExpandProperty Version
+          Write-Host "Pester version installed: $PesterVersion"
+        }
+        catch {
+          Write-Error "Failed to install Pester: $($_.Exception.Message)"
+          exit 1
+        }
+
+    - name: Install SQLite Dependencies (PowerShell 5.1)
+      if: matrix.powershell-version == '5.1'
+      shell: powershell
+      run: |
+        try {
+          Write-Host "PowerShell 5.1 - using built-in System.Data.SQLite support"
+
+          # List any SQLite-related modules
+          Get-Module -ListAvailable | Where-Object Name -like "*SQLite*" | Select-Object Name, Version
+        }
+        catch {
+          Write-Warning "SQLite module check failed: $($_.Exception.Message)"
+          Write-Host "Continuing - PowerShell 5.1 should have built-in SQLite support"
+        }
+
+    - name: Install SQLite Dependencies (PowerShell Core)
+      if: matrix.powershell-version != '5.1'
+      shell: pwsh
+      run: |
+        try {
+          Write-Host "Installing SQLite dependencies for PowerShell Core..."
+          # Try to install PSSQLite for cross-platform compatibility
+          Install-Module -Name PSSQLite -Force -SkipPublisherCheck -Scope CurrentUser -ErrorAction SilentlyContinue
 
           # List installed modules
           Get-Module -ListAvailable | Where-Object Name -like "*SQLite*" | Select-Object Name, Version
@@ -107,8 +131,9 @@ jobs:
           Write-Host "Continuing without SQLite module - tests may need to handle this"
         }
 
-    - name: List Module Files
-      shell: ${{ matrix.shell }}
+    - name: List Module Files (PowerShell 5.1)
+      if: matrix.powershell-version == '5.1'
+      shell: powershell
       run: |
         Write-Host "Repository contents:"
         Get-ChildItem -Path . -Recurse -File | Where-Object Extension -in @('.ps1', '.psm1', '.psd1') | Select-Object FullName
@@ -121,8 +146,88 @@ jobs:
         $TestFiles = Get-ChildItem -Path . -Filter "*.Tests.ps1" -Recurse
         $TestFiles | ForEach-Object { Write-Host "Found: $($_.FullName)" }
 
-    - name: Run Pester Tests
-      shell: ${{ matrix.shell }}
+    - name: List Module Files (PowerShell Core)
+      if: matrix.powershell-version != '5.1'
+      shell: pwsh
+      run: |
+        Write-Host "Repository contents:"
+        Get-ChildItem -Path . -Recurse -File | Where-Object Extension -in @('.ps1', '.psm1', '.psd1') | Select-Object FullName
+
+        Write-Host "`nLooking for module manifest:"
+        $ManifestFiles = Get-ChildItem -Path . -Filter "*.psd1" -Recurse
+        $ManifestFiles | ForEach-Object { Write-Host "Found: $($_.FullName)" }
+
+        Write-Host "`nLooking for test files:"
+        $TestFiles = Get-ChildItem -Path . -Filter "*.Tests.ps1" -Recurse
+        $TestFiles | ForEach-Object { Write-Host "Found: $($_.FullName)" }
+
+    - name: Run Pester Tests (PowerShell 5.1)
+      if: matrix.powershell-version == '5.1'
+      shell: powershell
+      run: |
+        try {
+          Import-Module Pester -Force
+
+          # Find test files
+          $TestFiles = Get-ChildItem -Path . -Filter "*.Tests.ps1" -Recurse
+
+          if ($TestFiles.Count -eq 0) {
+            Write-Warning "No test files found matching pattern '*.Tests.ps1'"
+            Write-Host "Looking for alternative test patterns..."
+            $TestFiles = Get-ChildItem -Path . -Filter "*Test*.ps1" -Recurse
+          }
+
+          if ($TestFiles.Count -eq 0) {
+            Write-Error "No test files found!"
+            exit 1
+          }
+
+          Write-Host "Found test files:"
+          $TestFiles | ForEach-Object { Write-Host "  - $($_.FullName)" }
+
+          # Configure Pester based on version
+          $PesterVersion = (Get-Module -ListAvailable -Name Pester | Select-Object -First 1).Version
+          Write-Host "Using Pester version: $PesterVersion"
+
+          if ($PesterVersion.Major -ge 5) {
+            Write-Host "Running Pester 5.x tests..."
+            $Config = New-PesterConfiguration
+            $Config.Run.Path = $TestFiles.FullName
+            $Config.TestResult.Enabled = $true
+            $Config.TestResult.OutputFormat = "NUnitXml"
+            $Config.TestResult.OutputPath = "TestResults.xml"
+            $Config.Output.Verbosity = "Detailed"
+
+            $TestResults = Invoke-Pester -Configuration $Config
+            $FailedCount = $TestResults.FailedCount
+          } else {
+            Write-Host "Running Pester 4.x tests..."
+            $TestResults = Invoke-Pester -Path $TestFiles.FullName -OutputFormat NUnitXml -OutputFile "TestResults.xml" -PassThru
+            $FailedCount = $TestResults.FailedCount
+          }
+
+          Write-Host "Test Results Summary:"
+          Write-Host "  Total: $($TestResults.TotalCount)"
+          Write-Host "  Passed: $($TestResults.PassedCount)"
+          Write-Host "  Failed: $FailedCount"
+
+          if ($FailedCount -gt 0) {
+            Write-Error "Tests failed! $FailedCount test(s) failed."
+            exit 1
+          }
+
+          Write-Host "All tests passed!"
+        }
+        catch {
+          Write-Error "Test execution failed: $($_.Exception.Message)"
+          Write-Host "Stack trace:"
+          Write-Host $_.ScriptStackTrace
+          exit 1
+        }
+
+    - name: Run Pester Tests (PowerShell Core)
+      if: matrix.powershell-version != '5.1'
+      shell: pwsh
       run: |
         try {
           Import-Module Pester -Force

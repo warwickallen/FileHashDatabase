@@ -38,17 +38,13 @@ jobs:
     - name: Install PowerShell Core (Ubuntu)
       if: matrix.os == 'ubuntu-latest'
       run: |
-        # Install PowerShell 7.4 on Ubuntu
-        wget -q https://github.com/PowerShell/PowerShell/releases/download/v7.4.0/powershell_7.4.0-1.deb_amd64.deb
-        sudo dpkg -i powershell_7.4.0-1.deb_amd64.deb
-        sudo apt-get install -f
+        # PowerShell 7.4 is pre-installed on GitHub Ubuntu runners
         pwsh --version
 
     - name: Install PowerShell Core (macOS)
       if: matrix.os == 'macos-latest'
       run: |
-        # Install PowerShell 7.4 on macOS
-        brew install --cask powershell
+        # PowerShell 7.4 is pre-installed on GitHub macOS runners
         pwsh --version
 
     - name: Verify PowerShell Installation (PowerShell 5.1)
@@ -104,7 +100,7 @@ jobs:
       shell: powershell
       run: |
         try {
-          Write-Host "PowerShell 5.1 - using built-in System.Data.SQLite support"
+          Write-Host "PowerShell 5.1 - checking SQLite support..."
 
           # List any SQLite-related modules
           Get-Module -ListAvailable | Where-Object Name -like "*SQLite*" | Select-Object Name, Version
@@ -131,7 +127,7 @@ jobs:
           Write-Host "Continuing without SQLite module - tests may need to handle this"
         }
 
-    - name: List Module Files and Import Module (PowerShell 5.1)
+    - name: Import Module and List Files (PowerShell 5.1)
       if: matrix.powershell-version == '5.1'
       shell: powershell
       run: |
@@ -182,7 +178,7 @@ jobs:
           Write-Error "No module manifest found!"
         }
 
-    - name: List Module Files and Import Module (PowerShell Core)
+    - name: Import Module and List Files (PowerShell Core)
       if: matrix.powershell-version != '5.1'
       shell: pwsh
       run: |

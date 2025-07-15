@@ -429,13 +429,6 @@ jobs:
         path: TestResults.xml
         if-no-files-found: warn
 
-    - name: Publish Test Results
-      uses: EnricoMi/publish-unit-test-result-action@v2
-      if: always() && matrix.os == 'windows-latest'
-      with:
-        files: TestResults.xml
-        check_name: "Test Results (${{ matrix.os }}, PowerShell ${{ matrix.powershell-version }})"
-
   code-analysis:
     runs-on: windows-latest
     steps:

@@ -23,9 +23,6 @@ $script:Config = @{
     )
 }
 
-# Load private classes
-. $PSScriptRoot\Private\FileHashDatabase.ps1
-
 # Load public functions
 . $PSScriptRoot\Public\Get-FileHashes.ps1
 . $PSScriptRoot\Public\Move-FileHashDuplicates.ps1

@@ -1,0 +1,188 @@
+name: PowerShell Cross-Platform Tests
+
+on:
+  push:
+    branches: [ main, develop, feature/* ]
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch:  # Allows manual triggering
+
+jobs:
+  test-powershell:
+    strategy:
+      matrix:
+        os: [windows-latest, ubuntu-latest, macos-latest]
+        powershell-version: [5.1, 6.2, 7.2, 7.3, 7.4]
+        exclude:
+          # PowerShell 5.1 only runs on Windows
+          - os: ubuntu-latest
+            powershell-version: 5.1
+          - os: macos-latest
+            powershell-version: 5.1
+          # PowerShell 6.2 is quite old, skip on non-Windows for efficiency
+          - os: ubuntu-latest
+            powershell-version: 6.2
+          - os: macos-latest
+            powershell-version: 6.2
+    
+    runs-on: ${{ matrix.os }}
+    
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+    
+    - name: Setup PowerShell (Non-Windows)
+      if: matrix.os != 'windows-latest'
+      uses: azure/powershell@v1
+      with:
+        powerShellVersion: ${{ matrix.powershell-version }}
+        inlineScript: |
+          Write-Host "PowerShell version: $($PSVersionTable.PSVersion)"
+    
+    - name: Setup PowerShell 5.1 (Windows)
+      if: matrix.os == 'windows-latest' && matrix.powershell-version == '5.1'
+      shell: powershell
+      run: |
+        Write-Host "Using built-in PowerShell 5.1"
+        Write-Host "PowerShell version: $($PSVersionTable.PSVersion)"
+    
+    - name: Setup PowerShell Core (Windows)
+      if: matrix.os == 'windows-latest' && matrix.powershell-version != '5.1'
+      uses: azure/powershell@v1
+      with:
+        powerShellVersion: ${{ matrix.powershell-version }}
+        inlineScript: |
+          Write-Host "PowerShell version: $($PSVersionTable.PSVersion)"
+    
+    - name: Install Pester
+      shell: pwsh
+      run: |
+        if ($PSVersionTable.PSVersion.Major -ge 6) {
+          Install-Module -Name Pester -Force -SkipPublisherCheck -Scope CurrentUser
+        } else {
+          # PowerShell 5.1 handling
+          if (-not (Get-Module -ListAvailable -Name Pester | Where-Object Version -ge '5.0.0')) {
+            Install-Module -Name Pester -Force -SkipPublisherCheck -Scope CurrentUser
+          }
+        }
+        Write-Host "Pester version: $(Get-Module -ListAvailable -Name Pester | Select-Object -First 1 -ExpandProperty Version)"
+    
+    - name: Install SQLite Dependencies
+      shell: pwsh
+      run: |
+        # Install System.Data.SQLite or PSSQLite module if needed
+        # Adjust based on your SQLite dependency approach
+        if ($PSVersionTable.PSVersion.Major -ge 6) {
+          # For PowerShell Core, you might need specific SQLite modules
+          Install-Module -Name PSSQLite -Force -SkipPublisherCheck -Scope CurrentUser -ErrorAction SilentlyContinue
+        }
+    
+    - name: Run Pester Tests (PowerShell 5.1)
+      if: matrix.powershell-version == '5.1'
+      shell: powershell
+      run: |
+        Import-Module Pester
+        $TestResults = Invoke-Pester -Path ".\Tests" -OutputFormat NUnitXml -OutputFile "TestResults.xml" -PassThru
+        if ($TestResults.FailedCount -gt 0) {
+          Write-Error "Tests failed!"
+          exit 1
+        }
+    
+    - name: Run Pester Tests (PowerShell Core)
+      if: matrix.powershell-version != '5.1'
+      shell: pwsh
+      run: |
+        Import-Module Pester
+        $Config = New-PesterConfiguration
+        $Config.Run.Path = ".\Tests"
+        $Config.TestResult.Enabled = $true
+        $Config.TestResult.OutputFormat = "NUnitXml"
+        $Config.TestResult.OutputPath = "TestResults.xml"
+        $Config.Output.Verbosity = "Detailed"
+        
+        $TestResults = Invoke-Pester -Configuration $Config
+        if ($TestResults.FailedCount -gt 0) {
+          Write-Error "Tests failed!"
+          exit 1
+        }
+    
+    - name: Upload test results
+      uses: actions/upload-artifact@v4
+      if: always()
+      with:
+        name: test-results-${{ matrix.os }}-ps${{ matrix.powershell-version }}
+        path: TestResults.xml
+    
+    - name: Publish Test Results
+      uses: EnricoMi/publish-unit-test-result-action@v2
+      if: always() && matrix.os == 'windows-latest'
+      with:
+        files: TestResults.xml
+        check_name: "Test Results (${{ matrix.os }}, PowerShell ${{ matrix.powershell-version }})"
+
+  code-analysis:
+    runs-on: windows-latest
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+    
+    - name: Run PSScriptAnalyzer
+      shell: pwsh
+      run: |
+        Install-Module -Name PSScriptAnalyzer -Force -SkipPublisherCheck -Scope CurrentUser
+        
+        # Analyse all PowerShell files
+        $AnalysisResults = Invoke-ScriptAnalyzer -Path . -Recurse -Settings PSGallery
+        
+        if ($AnalysisResults) {
+          Write-Host "PSScriptAnalyzer found issues:"
+          $AnalysisResults | Format-Table -AutoSize
+          
+          # Fail the build if there are errors or warnings
+          $ErrorCount = ($AnalysisResults | Where-Object Severity -eq 'Error').Count
+          $WarningCount = ($AnalysisResults | Where-Object Severity -eq 'Warning').Count
+          
+          Write-Host "Errors: $ErrorCount, Warnings: $WarningCount"
+          
+          if ($ErrorCount -gt 0) {
+            Write-Error "PSScriptAnalyzer found $ErrorCount error(s)!"
+            exit 1
+          }
+        } else {
+          Write-Host "No PSScriptAnalyzer issues found!"
+        }
+
+  build-validation:
+    runs-on: windows-latest
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+    
+    - name: Validate Module Manifest
+      shell: pwsh
+      run: |
+        # Check if module manifest exists and is valid
+        $ManifestPath = Get-ChildItem -Path . -Filter "*.psd1" -Recurse | Select-Object -First 1
+        
+        if ($ManifestPath) {
+          Write-Host "Found module manifest: $($ManifestPath.FullName)"
+          
+          # Test the module manifest
+          $TestResult = Test-ModuleManifest -Path $ManifestPath.FullName
+          Write-Host "Module manifest is valid!"
+          Write-Host "Module Name: $($TestResult.Name)"
+          Write-Host "Module Version: $($TestResult.Version)"
+          Write-Host "PowerShell Version: $($TestResult.PowerShellVersion)"
+          
+          # Try to import the module
+          Import-Module $ManifestPath.FullName -Force
+          Write-Host "Module imported successfully!"
+          
+          # List exported functions
+          $ExportedCommands = Get-Command -Module $TestResult.Name
+          Write-Host "Exported commands:"
+          $ExportedCommands | Format-Table Name, CommandType -AutoSize
+          
+        } else {
+          Write-Warning "No module manifest (.psd1) found!"
+        }

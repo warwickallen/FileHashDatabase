@@ -1,5 +1,8 @@
 # FileHashDatabase.psm1
 
+# Import the class using 'using module' for proper class loading
+using module .\Private\FileHashDatabase.ps1
+
 $script:Config = @{
     Defaults = @{
         DatabasePath = [System.IO.Path]::Combine($env:APPDATA, "FileHashDatabase", "FileHashes.db")

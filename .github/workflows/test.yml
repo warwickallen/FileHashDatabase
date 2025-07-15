@@ -131,7 +131,7 @@ jobs:
           Write-Host "Continuing without SQLite module - tests may need to handle this"
         }
 
-    - name: List Module Files (PowerShell 5.1)
+    - name: List Module Files and Import Module (PowerShell 5.1)
       if: matrix.powershell-version == '5.1'
       shell: powershell
       run: |
@@ -146,7 +146,27 @@ jobs:
         $TestFiles = Get-ChildItem -Path . -Filter "*.Tests.ps1" -Recurse
         $TestFiles | ForEach-Object { Write-Host "Found: $($_.FullName)" }
 
-    - name: List Module Files (PowerShell Core)
+        Write-Host "`nAttempting to import module..."
+        if ($ManifestFiles.Count -gt 0) {
+          $ModulePath = $ManifestFiles[0].FullName
+          Write-Host "Importing module from: $ModulePath"
+          try {
+            Import-Module $ModulePath -Force
+            Write-Host "Module imported successfully!"
+
+            # List exported functions
+            $ExportedCommands = Get-Command -Module (Split-Path (Split-Path $ModulePath -Parent) -Leaf)
+            if ($ExportedCommands.Count -gt 0) {
+              Write-Host "Exported commands:"
+              $ExportedCommands | Format-Table Name, CommandType -AutoSize
+            }
+          }
+          catch {
+            Write-Error "Failed to import module: $($_.Exception.Message)"
+          }
+        }
+
+    - name: List Module Files and Import Module (PowerShell Core)
       if: matrix.powershell-version != '5.1'
       shell: pwsh
       run: |
@@ -161,12 +181,42 @@ jobs:
         $TestFiles = Get-ChildItem -Path . -Filter "*.Tests.ps1" -Recurse
         $TestFiles | ForEach-Object { Write-Host "Found: $($_.FullName)" }
 
+        Write-Host "`nAttempting to import module..."
+        if ($ManifestFiles.Count -gt 0) {
+          $ModulePath = $ManifestFiles[0].FullName
+          Write-Host "Importing module from: $ModulePath"
+          try {
+            Import-Module $ModulePath -Force
+            Write-Host "Module imported successfully!"
+
+            # List exported functions
+            $ModuleName = (Get-Item $ModulePath).BaseName
+            $ExportedCommands = Get-Command -Module $ModuleName
+            if ($ExportedCommands.Count -gt 0) {
+              Write-Host "Exported commands:"
+              $ExportedCommands | Format-Table Name, CommandType -AutoSize
+            }
+          }
+          catch {
+            Write-Error "Failed to import module: $($_.Exception.Message)"
+          }
+        }
+
     - name: Run Pester Tests (PowerShell 5.1)
       if: matrix.powershell-version == '5.1'
       shell: powershell
       run: |
         try {
           Import-Module Pester -Force
+
+          # Import the module under test first
+          Write-Host "Importing module under test..."
+          $ManifestFiles = Get-ChildItem -Path . -Filter "*.psd1" -Recurse
+          if ($ManifestFiles.Count -gt 0) {
+            $ModulePath = $ManifestFiles[0].FullName
+            Import-Module $ModulePath -Force
+            Write-Host "Module imported: $ModulePath"
+          }
 
           # Find test files
           $TestFiles = Get-ChildItem -Path . -Filter "*.Tests.ps1" -Recurse
@@ -231,6 +281,15 @@ jobs:
       run: |
         try {
           Import-Module Pester -Force
+
+          # Import the module under test first
+          Write-Host "Importing module under test..."
+          $ManifestFiles = Get-ChildItem -Path . -Filter "*.psd1" -Recurse
+          if ($ManifestFiles.Count -gt 0) {
+            $ModulePath = $ManifestFiles[0].FullName
+            Import-Module $ModulePath -Force
+            Write-Host "Module imported: $ModulePath"
+          }
 
           # Find test files
           $TestFiles = Get-ChildItem -Path . -Filter "*.Tests.ps1" -Recurse

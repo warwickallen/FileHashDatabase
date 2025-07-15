@@ -138,9 +138,16 @@ jobs:
         Write-Host "Repository contents:"
         Get-ChildItem -Path . -Recurse -File | Where-Object Extension -in @('.ps1', '.psm1', '.psd1') | Select-Object FullName
 
-        Write-Host "`nLooking for module manifest:"
-        $ManifestFiles = Get-ChildItem -Path . -Filter "*.psd1" -Recurse
-        $ManifestFiles | ForEach-Object { Write-Host "Found: $($_.FullName)" }
+        Write-Host "`nLooking for module manifest in FileHashDatabase subdirectory:"
+        $ModuleDir = ".\FileHashDatabase"
+        if (Test-Path $ModuleDir) {
+          $ManifestFiles = Get-ChildItem -Path $ModuleDir -Filter "*.psd1" -Recurse
+          $ManifestFiles | ForEach-Object { Write-Host "Found: $($_.FullName)" }
+        } else {
+          Write-Host "FileHashDatabase directory not found, searching everywhere..."
+          $ManifestFiles = Get-ChildItem -Path . -Filter "*.psd1" -Recurse
+          $ManifestFiles | ForEach-Object { Write-Host "Found: $($_.FullName)" }
+        }
 
         Write-Host "`nLooking for test files:"
         $TestFiles = Get-ChildItem -Path . -Filter "*.Tests.ps1" -Recurse
@@ -151,19 +158,28 @@ jobs:
           $ModulePath = $ManifestFiles[0].FullName
           Write-Host "Importing module from: $ModulePath"
           try {
+            # Set the module path as an environment variable for tests to use
+            $env:TEST_MODULE_PATH = $ModulePath
             Import-Module $ModulePath -Force
             Write-Host "Module imported successfully!"
 
             # List exported functions
-            $ExportedCommands = Get-Command -Module (Split-Path (Split-Path $ModulePath -Parent) -Leaf)
-            if ($ExportedCommands.Count -gt 0) {
+            $ModuleName = (Get-Item $ModulePath).BaseName
+            $ExportedCommands = Get-Command -Module $ModuleName -ErrorAction SilentlyContinue
+            if ($ExportedCommands -and $ExportedCommands.Count -gt 0) {
               Write-Host "Exported commands:"
               $ExportedCommands | Format-Table Name, CommandType -AutoSize
+            } else {
+              Write-Warning "No exported commands found or module not properly loaded"
             }
           }
           catch {
             Write-Error "Failed to import module: $($_.Exception.Message)"
+            Write-Host "Full error details:"
+            Write-Host $_.Exception.ToString()
           }
+        } else {
+          Write-Error "No module manifest found!"
         }
 
     - name: List Module Files and Import Module (PowerShell Core)
@@ -173,9 +189,16 @@ jobs:
         Write-Host "Repository contents:"
         Get-ChildItem -Path . -Recurse -File | Where-Object Extension -in @('.ps1', '.psm1', '.psd1') | Select-Object FullName
 
-        Write-Host "`nLooking for module manifest:"
-        $ManifestFiles = Get-ChildItem -Path . -Filter "*.psd1" -Recurse
-        $ManifestFiles | ForEach-Object { Write-Host "Found: $($_.FullName)" }
+        Write-Host "`nLooking for module manifest in FileHashDatabase subdirectory:"
+        $ModuleDir = "./FileHashDatabase"
+        if (Test-Path $ModuleDir) {
+          $ManifestFiles = Get-ChildItem -Path $ModuleDir -Filter "*.psd1" -Recurse
+          $ManifestFiles | ForEach-Object { Write-Host "Found: $($_.FullName)" }
+        } else {
+          Write-Host "FileHashDatabase directory not found, searching everywhere..."
+          $ManifestFiles = Get-ChildItem -Path . -Filter "*.psd1" -Recurse
+          $ManifestFiles | ForEach-Object { Write-Host "Found: $($_.FullName)" }
+        }
 
         Write-Host "`nLooking for test files:"
         $TestFiles = Get-ChildItem -Path . -Filter "*.Tests.ps1" -Recurse
@@ -186,20 +209,28 @@ jobs:
           $ModulePath = $ManifestFiles[0].FullName
           Write-Host "Importing module from: $ModulePath"
           try {
+            # Set the module path as an environment variable for tests to use
+            $env:TEST_MODULE_PATH = $ModulePath
             Import-Module $ModulePath -Force
             Write-Host "Module imported successfully!"
 
             # List exported functions
             $ModuleName = (Get-Item $ModulePath).BaseName
-            $ExportedCommands = Get-Command -Module $ModuleName
-            if ($ExportedCommands.Count -gt 0) {
+            $ExportedCommands = Get-Command -Module $ModuleName -ErrorAction SilentlyContinue
+            if ($ExportedCommands -and $ExportedCommands.Count -gt 0) {
               Write-Host "Exported commands:"
               $ExportedCommands | Format-Table Name, CommandType -AutoSize
+            } else {
+              Write-Warning "No exported commands found or module not properly loaded"
             }
           }
           catch {
             Write-Error "Failed to import module: $($_.Exception.Message)"
+            Write-Host "Full error details:"
+            Write-Host $_.Exception.ToString()
           }
+        } else {
+          Write-Error "No module manifest found!"
         }
 
     - name: Run Pester Tests (PowerShell 5.1)
@@ -211,11 +242,34 @@ jobs:
 
           # Import the module under test first
           Write-Host "Importing module under test..."
-          $ManifestFiles = Get-ChildItem -Path . -Filter "*.psd1" -Recurse
+          $ModuleDir = ".\FileHashDatabase"
+          if (Test-Path $ModuleDir) {
+            $ManifestFiles = Get-ChildItem -Path $ModuleDir -Filter "*.psd1" -Recurse
+          } else {
+            $ManifestFiles = Get-ChildItem -Path . -Filter "*.psd1" -Recurse
+          }
+
           if ($ManifestFiles.Count -gt 0) {
             $ModulePath = $ManifestFiles[0].FullName
+            $env:TEST_MODULE_PATH = $ModulePath
             Import-Module $ModulePath -Force
             Write-Host "Module imported: $ModulePath"
+
+            # Verify module loaded
+            $ModuleName = (Get-Item $ModulePath).BaseName
+            $LoadedModule = Get-Module -Name $ModuleName
+            if ($LoadedModule) {
+              Write-Host "Module '$ModuleName' successfully loaded"
+              $Commands = Get-Command -Module $ModuleName -ErrorAction SilentlyContinue
+              if ($Commands) {
+                Write-Host "Available commands: $($Commands.Name -join ', ')"
+              }
+            } else {
+              Write-Warning "Module '$ModuleName' not found in loaded modules"
+            }
+          } else {
+            Write-Error "No module manifest found!"
+            exit 1
           }
 
           # Find test files
@@ -284,11 +338,34 @@ jobs:
 
           # Import the module under test first
           Write-Host "Importing module under test..."
-          $ManifestFiles = Get-ChildItem -Path . -Filter "*.psd1" -Recurse
+          $ModuleDir = "./FileHashDatabase"
+          if (Test-Path $ModuleDir) {
+            $ManifestFiles = Get-ChildItem -Path $ModuleDir -Filter "*.psd1" -Recurse
+          } else {
+            $ManifestFiles = Get-ChildItem -Path . -Filter "*.psd1" -Recurse
+          }
+
           if ($ManifestFiles.Count -gt 0) {
             $ModulePath = $ManifestFiles[0].FullName
+            $env:TEST_MODULE_PATH = $ModulePath
             Import-Module $ModulePath -Force
             Write-Host "Module imported: $ModulePath"
+
+            # Verify module loaded
+            $ModuleName = (Get-Item $ModulePath).BaseName
+            $LoadedModule = Get-Module -Name $ModuleName
+            if ($LoadedModule) {
+              Write-Host "Module '$ModuleName' successfully loaded"
+              $Commands = Get-Command -Module $ModuleName -ErrorAction SilentlyContinue
+              if ($Commands) {
+                Write-Host "Available commands: $($Commands.Name -join ', ')"
+              }
+            } else {
+              Write-Warning "Module '$ModuleName' not found in loaded modules"
+            }
+          } else {
+            Write-Error "No module manifest found!"
+            exit 1
           }
 
           # Find test files

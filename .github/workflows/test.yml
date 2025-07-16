@@ -11,11 +11,11 @@ jobs:
     strategy:
       fail-fast: false  # Allow other tests to continue if one fails
       matrix:
-        os: [windows-latest, windows-2019]
+        os: [windows-latest, windows-2022]
         powershell-version: ['5.1', '7.2', '7.4']
         exclude:
-          # PowerShell 5.1 is only available on Windows (and only on certain versions)
-          - os: windows-2019
+          # Reduce redundant combinations - focus on key version testing
+          - os: windows-2022
             powershell-version: '7.4'
 
     runs-on: ${{ matrix.os }}

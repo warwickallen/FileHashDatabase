@@ -291,6 +291,27 @@ jobs:
         path: TestResults.xml
         retention-days: 30
 
+    - name: Publish Test Results
+      uses: dorny/test-reporter@v1
+      if: always() && matrix.powershell-version != '5.1'  # Only for PS 7.x to avoid encoding issues
+      with:
+        name: 'Test Results (${{ matrix.os }}, PowerShell ${{ matrix.powershell-version }})'
+        path: TestResults.xml
+        reporter: java-junit
+        fail-on-error: false  # Don't fail the workflow based on test results here
+        only-summary: false
+        list-suites: 'failed'
+        list-tests: 'failed'
+        max-annotations: 50
+
+    - name: Publish Test Results (PowerShell 5.1 - Basic)
+      uses: actions/upload-artifact@v4
+      if: always() && matrix.powershell-version == '5.1'
+      with:
+        name: test-summary-ps51-${{ matrix.os }}
+        path: TestResults.xml
+        retention-days: 30
+
     - name: Final Test Summary
       if: always()
       shell: pwsh

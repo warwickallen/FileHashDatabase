@@ -1,0 +1,419 @@
+name: PowerShell Windows Tests
+
+on:
+  push:
+    branches: [ develop, main ]
+  pull_request:
+    branches: [ develop, main ]
+
+jobs:
+  test-powershell:
+    strategy:
+      fail-fast: false  # Allow other tests to continue if one fails
+      matrix:
+        os: [windows-latest, windows-2022]
+        powershell-version: ['5.1', '7.2', '7.4']
+        exclude:
+          # Reduce redundant combinations - focus on key version testing
+          - os: windows-2022
+            powershell-version: '7.4'
+
+    runs-on: ${{ matrix.os }}
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+
+    - name: Install PowerShell 7.x (if needed)
+      if: matrix.powershell-version != '5.1'
+      shell: pwsh
+      run: |
+        Write-Host "PowerShell 7.x is already available on GitHub Actions runners"
+        Write-Host "Current PowerShell Version: $($PSVersionTable.PSVersion)"
+
+    - name: Verify PowerShell Installation
+      shell: pwsh
+      run: |
+        Write-Host "=== PowerShell Environment Information ==="
+        Write-Host "PowerShell Version: $($PSVersionTable.PSVersion)"
+        Write-Host "PowerShell Edition: $($PSVersionTable.PSEdition)"
+        Write-Host "OS: $($PSVersionTable.OS)"
+        Write-Host "CLR Version: $($PSVersionTable.CLRVersion)"
+        Write-Host "Build Version: $($PSVersionTable.BuildVersion)"
+        Write-Host "Runner OS: ${{ matrix.os }}"
+        Write-Host "Target PS Version: ${{ matrix.powershell-version }}"
+
+    - name: Verify PowerShell 5.1 (when testing 5.1)
+      if: matrix.powershell-version == '5.1'
+      shell: powershell
+      run: |
+        Write-Host "=== Windows PowerShell 5.1 Environment ==="
+        Write-Host "PowerShell Version: $($PSVersionTable.PSVersion)"
+        Write-Host "PowerShell Edition: $($PSVersionTable.PSEdition)"
+        Write-Host "OS: $($PSVersionTable.OS)"
+        Write-Host "CLR Version: $($PSVersionTable.CLRVersion)"
+        Write-Host "Build Version: $($PSVersionTable.BuildVersion)"
+
+    - name: Install Pester (PowerShell 7.x)
+      if: matrix.powershell-version != '5.1'
+      shell: pwsh
+      run: |
+        Write-Host "Installing Pester for PowerShell 7.x..."
+        Install-Module -Name Pester -Force -SkipPublisherCheck -Scope CurrentUser -MinimumVersion 5.0.0
+        Import-Module Pester -Force
+        Write-Host "✅ Pester version: $((Get-Module Pester).Version)"
+
+    - name: Install Pester (PowerShell 5.1)
+      if: matrix.powershell-version == '5.1'
+      shell: powershell
+      run: |
+        Write-Host "Installing Pester for PowerShell 5.1..."
+        Install-Module -Name Pester -Force -SkipPublisherCheck -Scope CurrentUser -RequiredVersion 4.10.1
+        Import-Module Pester -Force
+        Write-Host "[OK] Pester version: $((Get-Module Pester).Version)"
+
+    - name: Install PSSQLite (PowerShell 7.x)
+      if: matrix.powershell-version != '5.1'
+      shell: pwsh
+      run: |
+        Write-Host "Installing PSSQLite for PowerShell 7.x..."
+        try {
+            Install-Module -Name PSSQLite -Force -SkipPublisherCheck -Scope CurrentUser -ErrorAction Stop
+            Import-Module PSSQLite -Force -ErrorAction Stop
+            Write-Host "✅ PSSQLite installed and imported successfully"
+
+            # Test basic SQLite functionality
+            $testDb = ":memory:"
+            $result = Invoke-SQLiteQuery -DataSource $testDb -Query "SELECT 1 as test"
+            Write-Host "✅ SQLite functionality verified: $($result.test)"
+        } catch {
+            Write-Error "❌ Failed to install or test PSSQLite: $_"
+            throw
+        }
+
+    - name: Install PSSQLite (PowerShell 5.1)
+      if: matrix.powershell-version == '5.1'
+      shell: powershell
+      run: |
+        Write-Host "Installing PSSQLite for PowerShell 5.1..."
+        try {
+            Install-Module -Name PSSQLite -Force -SkipPublisherCheck -Scope CurrentUser -ErrorAction Stop
+            Import-Module PSSQLite -Force -ErrorAction Stop
+            Write-Host "[OK] PSSQLite installed and imported successfully"
+
+            # Test basic SQLite functionality
+            $testDb = ":memory:"
+            $result = Invoke-SQLiteQuery -DataSource $testDb -Query "SELECT 1 as test"
+            Write-Host "[OK] SQLite functionality verified: $($result.test)"
+        } catch {
+            Write-Error "[ERROR] Failed to install or test PSSQLite: $_"
+            throw
+        }
+
+    - name: Test Module Import (PowerShell 7.x)
+      if: matrix.powershell-version != '5.1'
+      shell: pwsh
+      run: |
+        Write-Host "=== Testing Module Import on PowerShell 7.x ==="
+
+        $ModulePath = "./FileHashDatabase/FileHashDatabase.psd1"
+        Write-Host "Module path: $ModulePath"
+
+        if (-not (Test-Path $ModulePath)) {
+            throw "Module manifest not found at: $ModulePath"
+        }
+
+        Write-Host "Testing module manifest..."
+        $manifest = Test-ModuleManifest -Path $ModulePath -Verbose
+        Write-Host "[OK] Manifest valid - Version: $($manifest.Version)"
+
+        Write-Host "Importing module..."
+        Import-Module $ModulePath -Force -Verbose
+
+        Write-Host "Checking exported functions..."
+        $ExportedCommands = Get-Command -Module FileHashDatabase
+        Write-Host "[OK] Exported commands: $($ExportedCommands.Name -join ', ')"
+
+        if ($ExportedCommands.Count -eq 0) {
+            throw "No commands were exported from the module"
+        }
+
+        # Test class availability
+        try {
+            $testPath = Join-Path $env:TEMP "ClassTest_$(Get-Random).db"
+            $db = [FileHashDatabase]::new($testPath)
+            Write-Host "[OK] FileHashDatabase class instantiated successfully"
+            if (Test-Path $testPath) {
+                Remove-Item $testPath -Force -ErrorAction SilentlyContinue
+            }
+        } catch {
+            Write-Error "[ERROR] FileHashDatabase class instantiation failed: $_"
+            throw
+        }
+
+    - name: Test Module Import (PowerShell 5.1)
+      if: matrix.powershell-version == '5.1'
+      shell: powershell
+      run: |
+        Write-Host "=== Testing Module Import on PowerShell 5.1 ==="
+
+        $ModulePath = "./FileHashDatabase/FileHashDatabase.psd1"
+        Write-Host "Module path: $ModulePath"
+
+        if (-not (Test-Path $ModulePath)) {
+            throw "Module manifest not found at: $ModulePath"
+        }
+
+        Write-Host "Testing module manifest..."
+        $manifest = Test-ModuleManifest -Path $ModulePath -Verbose
+        Write-Host "✅ Manifest valid - Version: $($manifest.Version)"
+
+        Write-Host "Importing module..."
+        Import-Module $ModulePath -Force -Verbose
+
+        Write-Host "Checking exported functions..."
+        $ExportedCommands = Get-Command -Module FileHashDatabase
+        Write-Host "[OK] Exported commands: $($ExportedCommands.Name -join ', ')"
+
+        if ($ExportedCommands.Count -eq 0) {
+            throw "No commands were exported from the module"
+        }
+
+        # Test class availability
+        try {
+            $testPath = Join-Path $env:TEMP "ClassTest_$(Get-Random).db"
+            $db = [FileHashDatabase]::new($testPath)
+            Write-Host "[OK] FileHashDatabase class instantiated successfully"
+            if (Test-Path $testPath) {
+                Remove-Item $testPath -Force -ErrorAction SilentlyContinue
+            }
+        } catch {
+            Write-Error "❌ FileHashDatabase class instantiation failed: $_"
+            throw
+        }
+
+    - name: Run Tests (PowerShell 7.x)
+      if: matrix.powershell-version != '5.1'
+      shell: pwsh
+      continue-on-error: true  # Don't stop workflow on test failures
+      env:
+        TEST_MODULE_PATH: ${{ github.workspace }}/FileHashDatabase/FileHashDatabase.psd1
+      run: |
+        Write-Host "🧪 Starting Pester tests on PowerShell 7.x..."
+
+        # Set up test configuration for Pester 5+
+        $TestResultsPath = "TestResults.xml"
+
+        try {
+            $PesterConfig = New-PesterConfiguration
+            $PesterConfig.Run.Path = "./Tests"
+            $PesterConfig.Run.Exit = $false
+            $PesterConfig.TestResult.Enabled = $true
+            $PesterConfig.TestResult.OutputPath = $TestResultsPath
+            $PesterConfig.TestResult.OutputFormat = "NUnitXml"
+            $PesterConfig.Output.Verbosity = "Detailed"
+
+            Write-Host "Running tests with Pester 5+ configuration..."
+            $TestResults = Invoke-Pester -Configuration $PesterConfig
+
+            Write-Host "`n📊 Test Results Summary:"
+            Write-Host "  Total: $($TestResults.TotalCount)"
+            Write-Host "  ✅ Passed: $($TestResults.PassedCount)"
+            Write-Host "  ❌ Failed: $($TestResults.FailedCount)"
+            Write-Host "  ⏭️ Skipped: $($TestResults.SkippedCount)"
+
+            # Set environment variables for later steps
+            $env:TEST_TOTAL = $TestResults.TotalCount
+            $env:TEST_PASSED = $TestResults.PassedCount
+            $env:TEST_FAILED = $TestResults.FailedCount
+            $env:TEST_SKIPPED = $TestResults.SkippedCount
+
+            if ($TestResults.FailedCount -gt 0) {
+                Write-Host "⚠️ Some tests failed"
+                $env:TESTS_FAILED = "true"
+            } else {
+                Write-Host "🎉 All tests passed!"
+                $env:TESTS_FAILED = "false"
+            }
+        } catch {
+            Write-Error "❌ Test execution failed: $_"
+            $env:TESTS_FAILED = "true"
+            $env:TEST_ERROR = $_.Exception.Message
+        }
+
+    - name: Run Tests (PowerShell 5.1)
+      if: matrix.powershell-version == '5.1'
+      shell: powershell
+      continue-on-error: true
+      env:
+        TEST_MODULE_PATH: ${{ github.workspace }}/FileHashDatabase/FileHashDatabase.psd1
+      run: |
+        Write-Host "[TEST] Starting Pester tests on PowerShell 5.1..."
+
+        # Set up test configuration for Pester 4.x
+        $TestResultsPath = "TestResults.xml"
+
+        try {
+            Write-Host "Running tests with Pester 4.x configuration..."
+            $TestResults = Invoke-Pester -Path "./Tests" -OutputFile $TestResultsPath -OutputFormat NUnitXml -PassThru -Verbose
+
+            Write-Host ""
+            Write-Host "Test Results Summary:"
+            Write-Host "  Total: $($TestResults.TotalCount)"
+            Write-Host "  [PASS] Passed: $($TestResults.PassedCount)"
+            Write-Host "  [FAIL] Failed: $($TestResults.FailedCount)"
+            Write-Host "  [SKIP] Skipped: $($TestResults.SkippedCount)"
+
+            # Set environment variables for later steps
+            $env:TEST_TOTAL = $TestResults.TotalCount
+            $env:TEST_PASSED = $TestResults.PassedCount
+            $env:TEST_FAILED = $TestResults.FailedCount
+            $env:TEST_SKIPPED = $TestResults.SkippedCount
+
+            if ($TestResults.FailedCount -gt 0) {
+                Write-Host "[WARN] Some tests failed"
+                $env:TESTS_FAILED = "true"
+            } else {
+                Write-Host "[OK] All tests passed!"
+                $env:TESTS_FAILED = "false"
+            }
+        } catch {
+            Write-Error "[ERROR] Test execution failed: $_"
+            $env:TESTS_FAILED = "true"
+            $env:TEST_ERROR = $_.Exception.Message
+        }
+
+    - name: Upload Test Results
+      uses: actions/upload-artifact@v4
+      if: always()
+      with:
+        name: test-results-${{ matrix.os }}-ps${{ matrix.powershell-version }}
+        path: TestResults.xml
+        retention-days: 30
+
+    - name: Create Test Summary
+      if: always()
+      shell: pwsh
+      run: |
+        Write-Host "Creating GitHub Actions test summary..."
+
+        $summaryFile = $env:GITHUB_STEP_SUMMARY
+        if (-not $summaryFile) {
+          Write-Host "GitHub step summary not available"
+          return
+        }
+
+        $summary = "## Test Results: ${{ matrix.os }} - PowerShell ${{ matrix.powershell-version }}"
+        $summary += "`n`n| Metric | Count |"
+        $summary += "`n|--------|-------|"
+        $summary += "`n| **Total Tests** | $env:TEST_TOTAL |"
+        $summary += "`n| **✅ Passed** | $env:TEST_PASSED |"
+        $summary += "`n| **❌ Failed** | $env:TEST_FAILED |"
+        $summary += "`n| **⏭️ Skipped** | $env:TEST_SKIPPED |"
+        $summary += "`n`n### Status"
+
+        if ($env:TESTS_FAILED -eq 'true') {
+          $summary += "`n❌ **Some tests failed**"
+        } else {
+          $summary += "`n✅ **All tests passed**"
+        }
+
+        if ($env:TEST_ERROR) {
+          $summary += "`n`n### Error Details`n``````n$env:TEST_ERROR`n``````"
+        }
+
+        $summary += "`n`n### Test Artifacts`n- Download test results: ``test-results-${{ matrix.os }}-ps${{ matrix.powershell-version }}``"
+
+        $summary | Out-File -FilePath $summaryFile -Append -Encoding utf8
+        Write-Host "✅ Test summary added to GitHub Actions summary"
+
+    - name: Create Test Summary (PowerShell 5.1)
+      if: always() && matrix.powershell-version == '5.1'
+      shell: powershell
+      run: |
+        Write-Host "Creating GitHub Actions test summary for PowerShell 5.1..."
+
+        $summaryFile = $env:GITHUB_STEP_SUMMARY
+        if (-not $summaryFile) {
+          Write-Host "GitHub step summary not available"
+          return
+        }
+
+        $summary = "## Test Results: ${{ matrix.os }} - PowerShell ${{ matrix.powershell-version }}"
+        $summary += "`n`n| Metric | Count |"
+        $summary += "`n|--------|-------|"
+        $summary += "`n| **Total Tests** | $env:TEST_TOTAL |"
+        $summary += "`n| **[PASS] Passed** | $env:TEST_PASSED |"
+        $summary += "`n| **[FAIL] Failed** | $env:TEST_FAILED |"
+        $summary += "`n| **[SKIP] Skipped** | $env:TEST_SKIPPED |"
+        $summary += "`n`n### Status"
+
+        if ($env:TESTS_FAILED -eq 'true') {
+          $summary += "`n[FAIL] **Some tests failed**"
+        } else {
+          $summary += "`n[OK] **All tests passed**"
+        }
+
+        if ($env:TEST_ERROR) {
+          $summary += "`n`n### Error Details`n``````n$env:TEST_ERROR`n``````"
+        }
+
+        $summary += "`n`n### Test Artifacts`n- Download test results: ``test-results-${{ matrix.os }}-ps${{ matrix.powershell-version }}``"
+
+        $summary | Out-File -FilePath $summaryFile -Append -Encoding utf8
+        Write-Host "[OK] Test summary added to GitHub Actions summary"
+
+    - name: Final Test Summary
+      if: always()
+      shell: pwsh
+      run: |
+        Write-Host "`n🏁 Final Test Summary"
+        Write-Host "======================================"
+        Write-Host "OS: ${{ matrix.os }}"
+        Write-Host "PowerShell Version: ${{ matrix.powershell-version }}"
+
+        if ($env:TEST_TOTAL) {
+            Write-Host "📊 Tests Run: $env:TEST_TOTAL"
+            Write-Host "✅ Passed: $env:TEST_PASSED"
+            Write-Host "❌ Failed: $env:TEST_FAILED"
+            Write-Host "⏭️ Skipped: $env:TEST_SKIPPED"
+        }
+
+        if ($env:TEST_ERROR) {
+            Write-Host "🚨 Test Error: $env:TEST_ERROR"
+        }
+
+        if ($env:TESTS_FAILED -eq 'true') {
+            Write-Host "❌ This job had test failures or errors"
+            exit 1
+        } else {
+            Write-Host "✅ All tests completed successfully!"
+        }
+
+    - name: Final Test Summary (PowerShell 5.1)
+      if: always() && matrix.powershell-version == '5.1'
+      shell: powershell
+      run: |
+        Write-Host ""
+        Write-Host "Final Test Summary"
+        Write-Host "======================================"
+        Write-Host "OS: ${{ matrix.os }}"
+        Write-Host "PowerShell Version: ${{ matrix.powershell-version }}"
+
+        if ($env:TEST_TOTAL) {
+            Write-Host "[INFO] Tests Run: $env:TEST_TOTAL"
+            Write-Host "[PASS] Passed: $env:TEST_PASSED"
+            Write-Host "[FAIL] Failed: $env:TEST_FAILED"
+            Write-Host "[SKIP] Skipped: $env:TEST_SKIPPED"
+        }
+
+        if ($env:TEST_ERROR) {
+            Write-Host "[ERROR] Test Error: $env:TEST_ERROR"
+        }
+
+        if ($env:TESTS_FAILED -eq 'true') {
+            Write-Host "[FAIL] This job had test failures or errors"
+            exit 1
+        } else {
+            Write-Host "[OK] All tests completed successfully!"
+        }

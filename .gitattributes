@@ -1,0 +1,32 @@
+# .gitattributes for FileHashDatabase PowerShell project
+
+# Default behaviour for all files
+* text=auto
+
+# PowerShell files - enforce LF line endings and space-based indentation rules
+*.ps1 text eol=lf whitespace=blank-at-eol,blank-at-eof,space-before-tab,tab-in-indent,tabwidth=4
+*.psm1 text eol=lf whitespace=blank-at-eol,blank-at-eof,space-before-tab,tab-in-indent,tabwidth=4
+*.psd1 text eol=lf whitespace=blank-at-eol,blank-at-eof,space-before-tab,tab-in-indent,tabwidth=4
+
+# Test files
+*.Tests.ps1 text eol=lf whitespace=blank-at-eol,blank-at-eof,space-before-tab,tab-in-indent,tabwidth=4
+
+# Documentation
+*.md text eol=lf whitespace=blank-at-eol,blank-at-eof
+
+# YAML files (GitHub Actions)
+*.yml text eol=lf whitespace=blank-at-eol,blank-at-eof,space-before-tab,tab-in-indent,tabwidth=2
+*.yaml text eol=lf whitespace=blank-at-eol,blank-at-eof,space-before-tab,tab-in-indent,tabwidth=2
+
+# JSON files
+*.json text eol=lf whitespace=blank-at-eol,blank-at-eof,space-before-tab,tab-in-indent,tabwidth=2
+
+# Binary files - don't convert line endings
+*.dll binary
+*.exe binary
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.pdf binary

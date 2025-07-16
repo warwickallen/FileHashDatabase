@@ -1,0 +1,131 @@
+#!/bin/sh
+# Pre-commit hook for FileHashDatabase PowerShell project
+# Automatically converts tabs to spaces and strips trailing whitespace
+
+# Check if this is the initial commit
+if git rev-parse --verify HEAD >/dev/null 2>&1
+then
+    against=HEAD
+else
+    # Initial commit: diff against an empty tree object
+    against=4b825dc642cb6eb9a060e54bf8d69288fbee4904
+fi
+
+# Function to convert tabs to spaces
+convert_tabs_to_spaces() {
+    local file="$1"
+    local tab_width="$2"
+
+    # Convert tabs to spaces using expand
+    expand -t "$tab_width" "$file" > "$file.tmp"
+    mv "$file.tmp" "$file"
+}
+
+# Function to strip trailing whitespace
+strip_trailing_whitespace() {
+    local file="$1"
+
+    # Strip trailing whitespace using sed
+    sed -i 's/[[:space:]]*$//' "$file"
+}
+
+# Get list of staged files
+staged_files=$(git diff --cached --name-only --diff-filter=ACM)
+
+# Process each staged file
+for file in $staged_files; do
+    # Skip if file doesn't exist (might be deleted)
+    if [ ! -f "$file" ]; then
+        continue
+    fi
+
+    # Check if it's a text file to avoid processing binaries
+    if ! file "$file" | grep -q text; then
+        continue
+    fi
+
+    file_changed=false
+
+    # Process PowerShell files (4 spaces for tabs)
+    if echo "$file" | grep -qE '\.(ps1|psm1|psd1)$'; then
+        echo "Processing PowerShell file: $file"
+
+        # Check if file contains tabs
+        if grep -q $'\t' "$file"; then
+            echo "  - Converting tabs to 4 spaces"
+            convert_tabs_to_spaces "$file" 4
+            file_changed=true
+        fi
+
+        # Strip trailing whitespace
+        if grep -q '[[:space:]]$' "$file"; then
+            echo "  - Stripping trailing whitespace"
+            strip_trailing_whitespace "$file"
+            file_changed=true
+        fi
+
+    # Process YAML files (2 spaces for tabs)
+    elif echo "$file" | grep -qE '\.(yml|yaml)$'; then
+        echo "Processing YAML file: $file"
+
+        # Check if file contains tabs
+        if grep -q $'\t' "$file"; then
+            echo "  - Converting tabs to 2 spaces"
+            convert_tabs_to_spaces "$file" 2
+            file_changed=true
+        fi
+
+        # Strip trailing whitespace
+        if grep -q '[[:space:]]$' "$file"; then
+            echo "  - Stripping trailing whitespace"
+            strip_trailing_whitespace "$file"
+            file_changed=true
+        fi
+
+    # Process JSON files (2 spaces for tabs)
+    elif echo "$file" | grep -qE '\.json$'; then
+        echo "Processing JSON file: $file"
+
+        # Check if file contains tabs
+        if grep -q $'\t' "$file"; then
+            echo "  - Converting tabs to 2 spaces"
+            convert_tabs_to_spaces "$file" 2
+            file_changed=true
+        fi
+
+        # Strip trailing whitespace
+        if grep -q '[[:space:]]$' "$file"; then
+            echo "  - Stripping trailing whitespace"
+            strip_trailing_whitespace "$file"
+            file_changed=true
+        fi
+
+    # Process other text files (strip whitespace only)
+    else
+        # Strip trailing whitespace from other text files
+        if grep -q '[[:space:]]$' "$file"; then
+            echo "Processing text file: $file"
+            echo "  - Stripping trailing whitespace"
+            strip_trailing_whitespace "$file"
+            file_changed=true
+        fi
+    fi
+
+    # Re-stage the file if it was changed
+    if [ "$file_changed" = true ]; then
+        git add "$file"
+        echo "  - Re-staged modified file"
+    fi
+done
+
+# Check for whitespace errors using git's built-in detection
+if git diff --cached --check; then
+    echo "✅ No whitespace errors found"
+else
+    echo "❌ Whitespace errors detected!"
+    echo "The pre-commit hook should have fixed most issues."
+    echo "Please review the changes and commit again."
+    exit 1
+fi
+
+echo "✅ Pre-commit whitespace processing complete"

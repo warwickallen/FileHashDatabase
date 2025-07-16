@@ -12,8 +12,9 @@ Write-Host "FileHashDatabase Module Build Script" -ForegroundColor Green
 Write-Host "=====================================" -ForegroundColor Green
 
 # Validate module structure
-$ModuleRoot = Join-Path $PSScriptRoot "FileHashDatabase"
-$ManifestPath = Join-Path $ModuleRoot "FileHashDatabase.psd1"
+$ScriptRoot = Get-Item -Path $PSScriptRoot
+$ModuleRoot = Join-Path -Path $ScriptRoot.Parent.FullName -ChildPath 'FileHashDatabase'
+$ManifestPath = Join-Path $ModuleRoot 'FileHashDatabase.psd1'
 
 if (-not (Test-Path $ManifestPath)) {
     throw "Module manifest not found at: $ManifestPath"

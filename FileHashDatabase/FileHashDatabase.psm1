@@ -88,7 +88,9 @@ try {
 }
 
 # Load the FileHashDatabase class with multiple fallback strategies
-$classModulePath = Join-Path $script:ModuleRoot 'Private' 'FileHashDatabase.ps1'
+# Use Join-Path twice for PS 5.1 compatibility
+$privatePath = Join-Path $script:ModuleRoot 'Private'
+$classModulePath = Join-Path $privatePath 'FileHashDatabase.ps1'
 
 if (Test-Path $classModulePath) {
     Write-Verbose "Loading FileHashDatabase class from: $classModulePath"
@@ -193,7 +195,8 @@ if (Test-Path $publicFunctionPath) {
 if ($classLoaded) {
     try {
         # Try to create a test instance to verify the class works
-        $testDbPath = Join-Path ([System.IO.Path]::GetTempPath()) "ModuleLoadTest_$(Get-Random).db"
+        $tempPath = [System.IO.Path]::GetTempPath()
+        $testDbPath = Join-Path $tempPath "ModuleLoadTest_$(Get-Random).db"
         $testInstance = [FileHashDatabase]::new($testDbPath)
         
         if ($testInstance) {

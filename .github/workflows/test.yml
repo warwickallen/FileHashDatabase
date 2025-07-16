@@ -303,18 +303,14 @@ jobs:
           return
         }
 
-        $summary = @"
-## Test Results: ${{ matrix.os }} - PowerShell ${{ matrix.powershell-version }}
-
-| Metric | Count |
-|--------|-------|
-| **Total Tests** | $env:TEST_TOTAL |
-| **✅ Passed** | $env:TEST_PASSED |
-| **❌ Failed** | $env:TEST_FAILED |
-| **⏭️ Skipped** | $env:TEST_SKIPPED |
-
-### Status
-"@
+        $summary = "## Test Results: ${{ matrix.os }} - PowerShell ${{ matrix.powershell-version }}"
+        $summary += "`n`n| Metric | Count |"
+        $summary += "`n|--------|-------|"
+        $summary += "`n| **Total Tests** | $env:TEST_TOTAL |"
+        $summary += "`n| **✅ Passed** | $env:TEST_PASSED |"
+        $summary += "`n| **❌ Failed** | $env:TEST_FAILED |"
+        $summary += "`n| **⏭️ Skipped** | $env:TEST_SKIPPED |"
+        $summary += "`n`n### Status"
 
         if ($env:TESTS_FAILED -eq 'true') {
           $summary += "`n❌ **Some tests failed**"
@@ -323,7 +319,7 @@ jobs:
         }
 
         if ($env:TEST_ERROR) {
-          $summary += "`n`n### Error Details`n``````n$env:TEST_ERROR`n```````n"
+          $summary += "`n`n### Error Details`n``````n$env:TEST_ERROR`n``````"
         }
 
         $summary += "`n`n### Test Artifacts`n- Download test results: ``test-results-${{ matrix.os }}-ps${{ matrix.powershell-version }}``"
@@ -343,18 +339,14 @@ jobs:
           return
         }
 
-        $summary = @"
-## Test Results: ${{ matrix.os }} - PowerShell ${{ matrix.powershell-version }}
-
-| Metric | Count |
-|--------|-------|
-| **Total Tests** | $env:TEST_TOTAL |
-| **[PASS] Passed** | $env:TEST_PASSED |
-| **[FAIL] Failed** | $env:TEST_FAILED |
-| **[SKIP] Skipped** | $env:TEST_SKIPPED |
-
-### Status
-"@
+        $summary = "## Test Results: ${{ matrix.os }} - PowerShell ${{ matrix.powershell-version }}"
+        $summary += "`n`n| Metric | Count |"
+        $summary += "`n|--------|-------|"
+        $summary += "`n| **Total Tests** | $env:TEST_TOTAL |"
+        $summary += "`n| **[PASS] Passed** | $env:TEST_PASSED |"
+        $summary += "`n| **[FAIL] Failed** | $env:TEST_FAILED |"
+        $summary += "`n| **[SKIP] Skipped** | $env:TEST_SKIPPED |"
+        $summary += "`n`n### Status"
 
         if ($env:TESTS_FAILED -eq 'true') {
           $summary += "`n[FAIL] **Some tests failed**"
@@ -363,7 +355,7 @@ jobs:
         }
 
         if ($env:TEST_ERROR) {
-          $summary += "`n`n### Error Details`n``````n$env:TEST_ERROR`n```````n"
+          $summary += "`n`n### Error Details`n``````n$env:TEST_ERROR`n``````"
         }
 
         $summary += "`n`n### Test Artifacts`n- Download test results: ``test-results-${{ matrix.os }}-ps${{ matrix.powershell-version }}``"

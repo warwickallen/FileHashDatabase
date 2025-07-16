@@ -15,7 +15,7 @@ Write-Host "=====================================" -ForegroundColor Green
 # Determine paths - since this script is in Build/ subdirectory
 $BuildRoot = $PSScriptRoot
 $RepositoryRoot = Split-Path $BuildRoot -Parent
-$ModuleRoot = Join-Path $RepositoryRoot "FileHashDatabase"
+$ModuleRoot = Join-Path $RepositoryRoot "src"
 $ManifestPath = Join-Path $ModuleRoot "FileHashDatabase.psd1"
 $TestsPath = Join-Path $RepositoryRoot "Tests"
 

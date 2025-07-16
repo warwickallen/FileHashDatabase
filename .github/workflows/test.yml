@@ -70,7 +70,7 @@ jobs:
         Write-Host "Installing Pester for PowerShell 5.1..."
         Install-Module -Name Pester -Force -SkipPublisherCheck -Scope CurrentUser -RequiredVersion 4.10.1
         Import-Module Pester -Force
-        Write-Host "✅ Pester version: $((Get-Module Pester).Version)"
+        Write-Host "[OK] Pester version: $((Get-Module Pester).Version)"
 
     - name: Install PSSQLite (PowerShell 7.x)
       if: matrix.powershell-version != '5.1'
@@ -99,14 +99,14 @@ jobs:
         try {
             Install-Module -Name PSSQLite -Force -SkipPublisherCheck -Scope CurrentUser -ErrorAction Stop
             Import-Module PSSQLite -Force -ErrorAction Stop
-            Write-Host "✅ PSSQLite installed and imported successfully"
+            Write-Host "[OK] PSSQLite installed and imported successfully"
 
             # Test basic SQLite functionality
             $testDb = ":memory:"
             $result = Invoke-SQLiteQuery -DataSource $testDb -Query "SELECT 1 as test"
-            Write-Host "✅ SQLite functionality verified: $($result.test)"
+            Write-Host "[OK] SQLite functionality verified: $($result.test)"
         } catch {
-            Write-Error "❌ Failed to install or test PSSQLite: $_"
+            Write-Error "[ERROR] Failed to install or test PSSQLite: $_"
             throw
         }
 
@@ -125,14 +125,14 @@ jobs:
 
         Write-Host "Testing module manifest..."
         $manifest = Test-ModuleManifest -Path $ModulePath -Verbose
-        Write-Host "✅ Manifest valid - Version: $($manifest.Version)"
+        Write-Host "[OK] Manifest valid - Version: $($manifest.Version)"
 
         Write-Host "Importing module..."
         Import-Module $ModulePath -Force -Verbose
 
         Write-Host "Checking exported functions..."
         $ExportedCommands = Get-Command -Module FileHashDatabase
-        Write-Host "✅ Exported commands: $($ExportedCommands.Name -join ', ')"
+        Write-Host "[OK] Exported commands: $($ExportedCommands.Name -join ', ')"
 
         if ($ExportedCommands.Count -eq 0) {
             throw "No commands were exported from the module"
@@ -142,12 +142,12 @@ jobs:
         try {
             $testPath = Join-Path $env:TEMP "ClassTest_$(Get-Random).db"
             $db = [FileHashDatabase]::new($testPath)
-            Write-Host "✅ FileHashDatabase class instantiated successfully"
+            Write-Host "[OK] FileHashDatabase class instantiated successfully"
             if (Test-Path $testPath) {
                 Remove-Item $testPath -Force -ErrorAction SilentlyContinue
             }
         } catch {
-            Write-Error "❌ FileHashDatabase class instantiation failed: $_"
+            Write-Error "[ERROR] FileHashDatabase class instantiation failed: $_"
             throw
         }
 
@@ -173,7 +173,7 @@ jobs:
 
         Write-Host "Checking exported functions..."
         $ExportedCommands = Get-Command -Module FileHashDatabase
-        Write-Host "✅ Exported commands: $($ExportedCommands.Name -join ', ')"
+        Write-Host "[OK] Exported commands: $($ExportedCommands.Name -join ', ')"
 
         if ($ExportedCommands.Count -eq 0) {
             throw "No commands were exported from the module"
@@ -183,7 +183,7 @@ jobs:
         try {
             $testPath = Join-Path $env:TEMP "ClassTest_$(Get-Random).db"
             $db = [FileHashDatabase]::new($testPath)
-            Write-Host "✅ FileHashDatabase class instantiated successfully"
+            Write-Host "[OK] FileHashDatabase class instantiated successfully"
             if (Test-Path $testPath) {
                 Remove-Item $testPath -Force -ErrorAction SilentlyContinue
             }
@@ -248,7 +248,7 @@ jobs:
       env:
         TEST_MODULE_PATH: ${{ github.workspace }}/FileHashDatabase/FileHashDatabase.psd1
       run: |
-        Write-Host "🧪 Starting Pester tests on PowerShell 5.1..."
+        Write-Host "[TEST] Starting Pester tests on PowerShell 5.1..."
 
         # Set up test configuration for Pester 4.x
         $TestResultsPath = "TestResults.xml"
@@ -257,11 +257,12 @@ jobs:
             Write-Host "Running tests with Pester 4.x configuration..."
             $TestResults = Invoke-Pester -Path "./Tests" -OutputFile $TestResultsPath -OutputFormat NUnitXml -PassThru -Verbose
 
-            Write-Host "`n📊 Test Results Summary:"
+            Write-Host ""
+            Write-Host "Test Results Summary:"
             Write-Host "  Total: $($TestResults.TotalCount)"
-            Write-Host "  ✅ Passed: $($TestResults.PassedCount)"
-            Write-Host "  ❌ Failed: $($TestResults.FailedCount)"
-            Write-Host "  ⏭️ Skipped: $($TestResults.SkippedCount)"
+            Write-Host "  [PASS] Passed: $($TestResults.PassedCount)"
+            Write-Host "  [FAIL] Failed: $($TestResults.FailedCount)"
+            Write-Host "  [SKIP] Skipped: $($TestResults.SkippedCount)"
 
             # Set environment variables for later steps
             $env:TEST_TOTAL = $TestResults.TotalCount
@@ -270,14 +271,14 @@ jobs:
             $env:TEST_SKIPPED = $TestResults.SkippedCount
 
             if ($TestResults.FailedCount -gt 0) {
-                Write-Host "⚠️ Some tests failed"
+                Write-Host "[WARN] Some tests failed"
                 $env:TESTS_FAILED = "true"
             } else {
-                Write-Host "🎉 All tests passed!"
+                Write-Host "[OK] All tests passed!"
                 $env:TESTS_FAILED = "false"
             }
         } catch {
-            Write-Error "❌ Test execution failed: $_"
+            Write-Error "[ERROR] Test execution failed: $_"
             $env:TESTS_FAILED = "true"
             $env:TEST_ERROR = $_.Exception.Message
         }
@@ -321,25 +322,26 @@ jobs:
       if: always() && matrix.powershell-version == '5.1'
       shell: powershell
       run: |
-        Write-Host "`n🏁 Final Test Summary"
+        Write-Host ""
+        Write-Host "Final Test Summary"
         Write-Host "======================================"
         Write-Host "OS: ${{ matrix.os }}"
         Write-Host "PowerShell Version: ${{ matrix.powershell-version }}"
 
         if ($env:TEST_TOTAL) {
-            Write-Host "📊 Tests Run: $env:TEST_TOTAL"
-            Write-Host "✅ Passed: $env:TEST_PASSED"
-            Write-Host "❌ Failed: $env:TEST_FAILED"
-            Write-Host "⏭️ Skipped: $env:TEST_SKIPPED"
+            Write-Host "[INFO] Tests Run: $env:TEST_TOTAL"
+            Write-Host "[PASS] Passed: $env:TEST_PASSED"
+            Write-Host "[FAIL] Failed: $env:TEST_FAILED"
+            Write-Host "[SKIP] Skipped: $env:TEST_SKIPPED"
         }
 
         if ($env:TEST_ERROR) {
-            Write-Host "🚨 Test Error: $env:TEST_ERROR"
+            Write-Host "[ERROR] Test Error: $env:TEST_ERROR"
         }
 
         if ($env:TESTS_FAILED -eq 'true') {
-            Write-Host "❌ This job had test failures or errors"
+            Write-Host "[FAIL] This job had test failures or errors"
             exit 1
         } else {
-            Write-Host "✅ All tests completed successfully!"
+            Write-Host "[OK] All tests completed successfully!"
         }

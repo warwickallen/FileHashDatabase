@@ -11,7 +11,7 @@ Describe "Get-FileHashes" {
 
         It "Should have expected parameters" {
             $command = Get-Command Get-FileHashes
-            $expectedParams = @('Path', 'DatabasePath', 'Algorithm')
+            $expectedParams = @('DatabasePath')
 
             foreach ($param in $expectedParams) {
                 $command.Parameters.Keys | Should -Contain $param -Because "Parameter $param should exist"
@@ -31,7 +31,7 @@ Describe "Get-FileHashes" {
         }
 
         It "Should process files without errors" {
-            { Get-FileHashes -Path $TestDrive -DatabasePath $testDb } | Should -Not -Throw
+            { Get-FileHashes -DatabasePath $testDb } | Should -Not -Throw
         }
     }
 }

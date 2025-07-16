@@ -13,12 +13,10 @@ jobs:
       matrix:
         os: [ubuntu-latest, windows-latest, macos-latest]
         powershell-version: ['7.4']
-        shell: ['pwsh']
         include:
           # Test Windows PowerShell 5.1 on Windows only
           - os: windows-latest
             powershell-version: '5.1'
-            shell: 'powershell'
 
     runs-on: ${{ matrix.os }}
 
@@ -33,7 +31,7 @@ jobs:
         powershell-version: ${{ matrix.powershell-version }}
 
     - name: Install Pester
-      shell: ${{ matrix.shell }}
+      shell: pwsh
       run: |
         Write-Host "Installing Pester..."
         if ($PSVersionTable.PSVersion.Major -ge 7) {
@@ -44,8 +42,17 @@ jobs:
         Import-Module Pester -Force
         Write-Host "Pester version: $((Get-Module Pester).Version)"
 
+    - name: Install Pester (PowerShell 5.1)
+      if: matrix.powershell-version == '5.1'
+      shell: powershell
+      run: |
+        Write-Host "Installing Pester for PowerShell 5.1..."
+        Install-Module -Name Pester -Force -SkipPublisherCheck -Scope CurrentUser -RequiredVersion 4.10.1
+        Import-Module Pester -Force
+        Write-Host "Pester version: $((Get-Module Pester).Version)"
+
     - name: Install PSSQLite (if available)
-      shell: ${{ matrix.shell }}
+      shell: pwsh
       continue-on-error: true  # Don't fail if PSSQLite can't be installed
       run: |
         Write-Host "Attempting to install PSSQLite..."
@@ -62,8 +69,23 @@ jobs:
             Write-Host "Tests will run with PSSQLite functionality disabled"
         }
 
+    - name: Install PSSQLite (PowerShell 5.1)
+      if: matrix.powershell-version == '5.1'
+      shell: powershell
+      continue-on-error: true
+      run: |
+        Write-Host "Attempting to install PSSQLite for PowerShell 5.1..."
+        try {
+            Install-Module -Name PSSQLite -Force -SkipPublisherCheck -Scope CurrentUser -ErrorAction Stop
+            Import-Module PSSQLite -Force
+            Write-Host "PSSQLite installed successfully"
+        } catch {
+            Write-Warning "Could not install PSSQLite: $($_.Exception.Message)"
+            Write-Host "Tests will run with PSSQLite functionality disabled"
+        }
+
     - name: Test Module Import
-      shell: ${{ matrix.shell }}
+      shell: pwsh
       run: |
         Write-Host "PowerShell Version: $($PSVersionTable.PSVersion)"
         Write-Host "OS: $($PSVersionTable.OS)"
@@ -90,8 +112,36 @@ jobs:
             throw "No commands were exported from the module"
         }
 
+    - name: Test Module Import (PowerShell 5.1)
+      if: matrix.powershell-version == '5.1'
+      shell: powershell
+      run: |
+        Write-Host "PowerShell Version: $($PSVersionTable.PSVersion)"
+        Write-Host "OS: $($PSVersionTable.OS)"
+
+        $ModulePath = "./FileHashDatabase/FileHashDatabase.psd1"
+        Write-Host "Module path: $ModulePath"
+
+        if (-not (Test-Path $ModulePath)) {
+            throw "Module manifest not found at: $ModulePath"
+        }
+
+        Write-Host "Testing module manifest..."
+        Test-ModuleManifest -Path $ModulePath -Verbose
+
+        Write-Host "Importing module..."
+        Import-Module $ModulePath -Force -Verbose
+
+        Write-Host "Checking exported functions..."
+        $ExportedCommands = Get-Command -Module FileHashDatabase
+        Write-Host "Exported commands: $($ExportedCommands.Name -join ', ')"
+
+        if ($ExportedCommands.Count -eq 0) {
+            throw "No commands were exported from the module"
+        }
+
     - name: Run Tests
-      shell: ${{ matrix.shell }}
+      shell: pwsh
       continue-on-error: true  # Don't stop workflow on test failures
       env:
         TEST_MODULE_PATH: ${{ github.workspace }}/FileHashDatabase/FileHashDatabase.psd1
@@ -134,6 +184,32 @@ jobs:
             Write-Host "Some tests failed, but continuing to upload results..."
         }
 
+    - name: Run Tests (PowerShell 5.1)
+      if: matrix.powershell-version == '5.1'
+      shell: powershell
+      continue-on-error: true
+      env:
+        TEST_MODULE_PATH: ${{ github.workspace }}/FileHashDatabase/FileHashDatabase.psd1
+      run: |
+        Write-Host "Starting Pester tests for PowerShell 5.1..."
+
+        # PowerShell 5.1 uses Pester 4.x
+        Write-Host "Running tests with Pester 4.x configuration..."
+        $TestResultsPath = "TestResults.xml"
+        $TestResults = Invoke-Pester -Path "./Tests" -OutputFile $TestResultsPath -OutputFormat NUnitXml -PassThru -Verbose
+
+        Write-Host "Test Results Summary:"
+        Write-Host "  Total: $($TestResults.TotalCount)"
+        Write-Host "  Passed: $($TestResults.PassedCount)"
+        Write-Host "  Failed: $($TestResults.FailedCount)"
+        Write-Host "  Skipped: $($TestResults.SkippedCount)"
+
+        # Set environment variable for later steps
+        if ($TestResults.FailedCount -gt 0) {
+            Write-Host "##vso[task.setvariable variable=TestsFailed]true"
+            Write-Host "Some tests failed, but continuing to upload results..."
+        }
+
     - name: Upload Test Results
       uses: actions/upload-artifact@v4
       if: always()  # Always upload, even if tests failed
@@ -152,8 +228,19 @@ jobs:
         fail-on-error: false  # Don't fail the workflow based on test results here
 
     - name: Check Test Results
-      shell: ${{ matrix.shell }}
+      shell: pwsh
       if: always()
+      run: |
+        if ($env:TestsFailed -eq 'true') {
+            Write-Host "Tests failed - marking step as failed"
+            exit 1
+        } else {
+            Write-Host "All tests passed"
+        }
+
+    - name: Check Test Results (PowerShell 5.1)
+      if: always() && matrix.powershell-version == '5.1'
+      shell: powershell
       run: |
         if ($env:TestsFailed -eq 'true') {
             Write-Host "Tests failed - marking step as failed"

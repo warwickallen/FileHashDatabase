@@ -8,11 +8,13 @@ BeforeAll {
     } else {
         # Fallback logic with multiple possible locations
         $possiblePaths = @(
-            (Join-Path $PSScriptRoot '..\FileHashDatabase\FileHashDatabase.psd1'),
-            (Join-Path (Split-Path $PSScriptRoot -Parent) 'FileHashDatabase\FileHashDatabase.psd1'),
-            (Join-Path $PSScriptRoot '..\FileHashDatabase.psd1')
+            (Join-Path $PSScriptRoot '..\..\src\FileHashDatabase.psd1'),               # New structure
+            (Join-Path (Split-Path $PSScriptRoot -Parent) '..\src\FileHashDatabase.psd1'), # Alternative new structure
+            (Join-Path $PSScriptRoot '..\FileHashDatabase\FileHashDatabase.psd1'),     # Old structure (fallback)
+            (Join-Path (Split-Path $PSScriptRoot -Parent) 'FileHashDatabase\FileHashDatabase.psd1'), # Old structure (fallback)
+            (Join-Path $PSScriptRoot '..\FileHashDatabase.psd1')                       # Old structure (fallback)
         )
-        
+
         $manifestPath = $null
         foreach ($path in $possiblePaths) {
             if (Test-Path $path) {
@@ -21,7 +23,7 @@ BeforeAll {
                 break
             }
         }
-        
+
         if (-not $manifestPath) {
             throw "Cannot find module manifest. Searched paths: $($possiblePaths -join ', ')"
         }
@@ -31,21 +33,21 @@ BeforeAll {
     try {
         Write-Host "Testing module manifest: $manifestPath"
         $null = Test-ModuleManifest -Path $manifestPath -ErrorAction Stop
-        
+
         Write-Host "Importing module: $manifestPath"
         Import-Module -Name $manifestPath -Force -ErrorAction Stop -Verbose:$false
-        
+
         $module = Get-Module -Name FileHashDatabase
         if (-not $module) {
             throw "Module FileHashDatabase was not imported successfully"
         }
-        
+
         Write-Host "Successfully imported module: $($module.Name) version $($module.Version)"
-        
+
         # Check exported functions
         $exportedCommands = Get-Command -Module FileHashDatabase -ErrorAction SilentlyContinue
         Write-Host "Exported commands: $($exportedCommands.Name -join ', ')"
-        
+
     } catch {
         Write-Error "Failed to import FileHashDatabase module: $_"
         throw
@@ -71,10 +73,10 @@ BeforeAll {
     try {
         # Try to create a test instance to verify class is available
         $testDbPath = Join-Path ([System.IO.Path]::GetTempPath()) "ClassTest_$(Get-Random).db"
-        
+
         # Use different approaches based on PowerShell version and platform
         $classAvailable = $false
-        
+
         try {
             # Method 1: Direct instantiation
             $testDb = [FileHashDatabase]::new($testDbPath)
@@ -85,7 +87,7 @@ BeforeAll {
         } catch {
             Write-Host "Direct class instantiation failed: $($_.Exception.Message)"
         }
-        
+
         if (-not $classAvailable) {
             try {
                 # Method 2: Try via New-Object
@@ -98,12 +100,12 @@ BeforeAll {
                 Write-Host "New-Object instantiation failed: $($_.Exception.Message)"
             }
         }
-        
+
         # Clean up test database
         if (Test-Path $testDbPath) {
             Remove-Item $testDbPath -Force -ErrorAction SilentlyContinue
         }
-        
+
         if ($classAvailable) {
             Write-Host "FileHashDatabase class is available"
             $script:SkipClassTests = $false
@@ -111,7 +113,7 @@ BeforeAll {
             Write-Warning "FileHashDatabase class is not accessible - class-dependent tests will be skipped"
             $script:SkipClassTests = $true
         }
-        
+
     } catch {
         Write-Warning "Error testing FileHashDatabase class: $_ - class-dependent tests will be skipped"
         $script:SkipClassTests = $true
@@ -127,7 +129,7 @@ BeforeAll {
         $script:StagingDir = "/tmp/FileHashDatabase_staging"
         $script:TempDir = "/tmp"
     }
-    
+
     Write-Host "Test environment configured:"
     Write-Host "  TestDrive: $script:TestDrive"
     Write-Host "  StagingDir: $script:StagingDir"
@@ -187,11 +189,11 @@ Describe "Function Parameter Validation" {
 Describe "Class-Dependent Tests" -Skip:$script:SkipClassTests {
     BeforeAll {
         if ($script:SkipClassTests) { return }
-        
+
         # Set up temporary database
         $script:dbPath = Join-Path $script:TempDir "TestFileHashes_$(Get-Random).db"
         Write-Host "Creating temporary database at: $script:dbPath"
-        
+
         try {
             $script:db = [FileHashDatabase]::new($script:dbPath)
         } catch {
@@ -234,10 +236,10 @@ Describe "Class-Dependent Tests" -Skip:$script:SkipClassTests {
             $algorithm = "SHA256"
             $fileSize = 100
             $timestamp = Get-Date
-            
+
             # This should not throw
             { $script:db.LogFileHash($hash, $algorithm, $testFile, $fileSize, $timestamp) } | Should -Not -Throw
-            
+
         } catch {
             Write-Warning "Database operation test failed: $_"
         }
@@ -292,7 +294,7 @@ Describe "Cross-Platform Compatibility" {
     It "Should handle paths correctly on current platform" {
         $testPath = Join-Path $script:TempDir "test"
         $testPath | Should -Not -BeNullOrEmpty
-        
+
         # The path should be valid for the current platform
         [System.IO.Path]::IsPathRooted($testPath) | Should -Be $true
     }

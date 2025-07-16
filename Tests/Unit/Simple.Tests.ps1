@@ -6,9 +6,10 @@ BeforeAll {
         $ModuleManifest = Get-Item $ModulePath
         $ModuleDirectory = Split-Path $ModulePath -Parent
     } else {
-        # Fallback for local testing - look in the parent directory's FileHashDatabase subdirectory
-        $RepositoryRoot = Split-Path $PSScriptRoot -Parent
-        $ModuleDirectory = Join-Path $RepositoryRoot "FileHashDatabase"
+        # Fallback for local testing - look in the grandparent directory's src subdirectory
+        $TestsRoot = Split-Path $PSScriptRoot -Parent
+        $RepositoryRoot = Split-Path $TestsRoot -Parent
+        $ModuleDirectory = Join-Path $RepositoryRoot "src"
         $ModuleManifest = Get-ChildItem -Path $ModuleDirectory -Filter "*.psd1" -Recurse | Select-Object -First 1
         if ($ModuleManifest) {
             $ModulePath = $ModuleManifest.FullName

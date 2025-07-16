@@ -99,6 +99,22 @@ MovedFile (SourcePath);
             @('Index MovedFile (Hash, AlgorithmId)', @"
 CREATE INDEX IF NOT EXISTS idx_movedfile_hash_algorithmid ON
 MovedFile (Hash, AlgorithmId);
+"@          ),
+            @('View DeduplicatedFile', @"
+CREATE VIEW IF NOT EXISTS DeduplicatedFile AS
+SELECT 
+  fh.Hash
+, a.AlgorithmName AS Algorithm
+, GROUP_CONCAT(fh.FilePath, CHAR(10)) AS FilePaths
+, COUNT(DISTINCT fh.FilePath) AS FileCount
+, MAX(fh.FileSize) AS MaxFileSize
+, MIN(fh.ProcessedAt) AS MinProcessedAt
+, MAX(fh.ProcessedAt) AS MaxProcessedAt
+, COUNT(*) AS RecordCount
+FROM FileHash fh
+JOIN Algorithm a ON fh.AlgorithmId = a.AlgorithmId
+WHERE fh.Hash IS NOT NULL
+GROUP BY fh.Hash, fh.AlgorithmId;
 "@          )
         )
         foreach ($sql in $sqlCreate) {

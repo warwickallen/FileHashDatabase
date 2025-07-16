@@ -8,15 +8,9 @@ BeforeAll {
     } else {
         # Fallback for local testing - look in the grandparent directory's src subdirectory
         $TestsRoot = Split-Path $PSScriptRoot -Parent
-        Write-Debug "     TestsRoot                      = '$TestsRoot'"
         $RepositoryRoot = Split-Path $TestsRoot -Parent
-        Write-Debug "RepositoryRoot (first  calculation) = '$RepositoryRoot'"
-        $RepositoryRoot = Split-Path (Split-Path $PSScriptRoot -Parent) -Parent
-        Write-Debug "RepositoryRoot (second calculation) = '$RepositoryRoot'"
         $ModuleDirectory = Join-Path $RepositoryRoot "src"
-        Write-Debug "ModuleDirectory                     = '$ModuleDirectory'"
         $ModuleManifest = Get-ChildItem -Path $ModuleDirectory -Filter "*.psd1" -Recurse | Select-Object -First 1
-        Write-Debug "ModuleManifest                      = '$ModuleManifest'"
         if ($ModuleManifest) {
             $ModulePath = $ModuleManifest.FullName
         }
@@ -61,12 +55,6 @@ Describe "Basic Environment Tests" {
 }
 
 Describe "Module Discovery Tests" {
-    BeforeAll {
-        # Look in the correct location for module files
-        $RepositoryRoot = Split-Path $PSScriptRoot -Parent
-        $ModuleDirectory = Join-Path $RepositoryRoot "FileHashDatabase"
-    }
-
     It "Should find at least one PowerShell file in the module directory" {
         $PSFiles = Get-ChildItem -Path $ModuleDirectory -Filter "*.ps1" -Recurse -ErrorAction SilentlyContinue
         $PSFiles.Count | Should -BeGreaterThan 0
@@ -83,17 +71,6 @@ Describe "Module Discovery Tests" {
 }
 
 Describe "Module Import Tests" {
-    BeforeAll {
-        # Use the same logic as the main BeforeAll block
-        if ($env:TEST_MODULE_PATH) {
-            $ModuleManifest = Get-Item $env:TEST_MODULE_PATH
-        } else {
-            $RepositoryRoot = Split-Path $PSScriptRoot -Parent
-            $ModuleDirectory = Join-Path $RepositoryRoot "FileHashDatabase"
-            $ModuleManifest = Get-ChildItem -Path $ModuleDirectory -Filter "*.psd1" -Recurse -ErrorAction SilentlyContinue | Select-Object -First 1
-        }
-    }
-
     It "Should have a valid module manifest" {
         $ModuleManifest | Should -Not -BeNullOrEmpty
         if ($ModuleManifest) {

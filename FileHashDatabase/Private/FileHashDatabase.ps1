@@ -1,31 +1,111 @@
+# FileHashDatabase.ps1 - Cross-Platform PowerShell 5.1+ Compatible Version
+
+# Check if we're in a module context and adjust accordingly
+$script:ModuleRoot = if ($PSScriptRoot) {
+    Split-Path $PSScriptRoot -Parent
+} else {
+    $PWD
+}
+
+# Cross-platform default database path detection - OUTSIDE the class to avoid scoping issues
+function Get-DefaultDatabasePath {
+    # PowerShell 5.1 compatible platform detection
+    $isWindowsPlatform = $true
+
+    # Check PowerShell version and platform
+    if ($PSVersionTable.PSVersion.Major -ge 6) {
+        # PowerShell 6+ has automatic platform variables
+        if (Get-Variable -Name 'IsWindows' -ErrorAction SilentlyContinue) {
+            $isWindowsPlatform = $IsWindows
+        } elseif (Get-Variable -Name 'IsLinux' -ErrorAction SilentlyContinue -ValueOnly) {
+            $isWindowsPlatform = $false
+        } elseif (Get-Variable -Name 'IsMacOS' -ErrorAction SilentlyContinue -ValueOnly) {
+            $isWindowsPlatform = $false
+        }
+    } else {
+        # PowerShell 5.1 - use environment variable detection
+        if ($env:HOME -and -not $env:APPDATA) {
+            # Likely Unix-like system (though PS 5.1 is usually Windows-only)
+            $isWindowsPlatform = $false
+        } elseif ($env:OS -eq 'Windows_NT') {
+            $isWindowsPlatform = $true
+        }
+        # Default to Windows for PS 5.1 since it's typically Windows-only
+    }
+
+    if ($isWindowsPlatform) {
+        # Windows path
+        return [System.IO.Path]::Combine($env:APPDATA, "FileHashDatabase", "FileHashes.db")
+    } else {
+        # Unix-like systems (Linux, macOS)
+        $homeDir = if ($env:HOME) { $env:HOME } else { "~" }
+        $localPath = [System.IO.Path]::Combine($homeDir, ".local")
+        $sharePath = [System.IO.Path]::Combine($localPath, "share")
+        $appPath = [System.IO.Path]::Combine($sharePath, "FileHashDatabase")
+        return [System.IO.Path]::Combine($appPath, "FileHashes.db")
+    }
+}
+
+# Get the default path outside the class
+$script:DefaultDatabasePath = Get-DefaultDatabasePath
+
+# Define the class with the computed default path
 class FileHashDatabase {
-    static [string] $DatabasePath = $script:Config.Defaults.DatabasePath
+    static [string] $DatabasePath
+
+    # Static constructor - use the pre-computed path
+    static FileHashDatabase() {
+        [FileHashDatabase]::DatabasePath = $script:DefaultDatabasePath
+    }
 
     FileHashDatabase([string]$path) {
         if ($path) {
-            # Normalise and validate the provided path
-            $resolvedPath = [System.IO.Path]::GetFullPath($path)
-            if (-not [System.IO.Path]::IsPathRooted($resolvedPath)) {
-                throw "The provided database path '$resolvedPath' is not a valid absolute path."
+            # Normalize and validate the provided path
+            try {
+                $resolvedPath = [System.IO.Path]::GetFullPath($path)
+                if (-not [System.IO.Path]::IsPathRooted($resolvedPath)) {
+                    throw "The provided database path '$resolvedPath' is not a valid absolute path."
+                }
+                [FileHashDatabase]::DatabasePath = $resolvedPath
+            } catch {
+                throw "Invalid database path '$path': $_"
             }
-            [FileHashDatabase]::DatabasePath = $resolvedPath
         }
+
         # Ensure the path is always fully resolved
-        [FileHashDatabase]::DatabasePath = [System.IO.Path]::GetFullPath(
-            [FileHashDatabase]::DatabasePath
-        )
-        "Resolved database path: {0}" -f [FileHashDatabase]::DatabasePath | Write-Debug
+        try {
+            [FileHashDatabase]::DatabasePath = [System.IO.Path]::GetFullPath([FileHashDatabase]::DatabasePath)
+            Write-Debug "Resolved database path: $([FileHashDatabase]::DatabasePath)"
+        } catch {
+            throw "Could not resolve database path: $_"
+        }
+
         $this.EnsureSchema()
     }
 
     static [bool] IsModuleAvailable([string]$moduleName) {
-        return [bool](Get-Module -ListAvailable -Name $moduleName)
+        try {
+            return [bool](Get-Module -ListAvailable -Name $moduleName -ErrorAction SilentlyContinue)
+        } catch {
+            return $false
+        }
     }
 
     [System.Object[]] InvokeQuery([string]$query, [hashtable]$parameters) {
         $dbPath = [FileHashDatabase]::DatabasePath
-        "Executing query: $query with parameters: $($parameters | Out-String)" | Write-Debug
+        Write-Debug "Executing query: $query with parameters: $($parameters | Out-String)"
+
+        # Check if PSSQLite is available before attempting to use it
+        if (-not [FileHashDatabase]::IsModuleAvailable('PSSQLite')) {
+            throw "PSSQLite module is required but not available. Install with: Install-Module PSSQLite"
+        }
+
         try {
+            # Import PSSQLite if not already loaded
+            if (-not (Get-Module -Name PSSQLite)) {
+                Import-Module PSSQLite -ErrorAction Stop
+            }
+
             return Invoke-SQLiteQuery -DataSource $dbPath -Query $query -SqlParameters $parameters
         } catch {
             throw "Error executing query '$query': $_"
@@ -36,21 +116,29 @@ class FileHashDatabase {
         # Ensure the database directory exists
         $dbPath = [FileHashDatabase]::DatabasePath
         Write-Debug "(EnsureSchema) Database path: $dbPath"
-        $dbDir = [System.IO.Path]::GetDirectoryName($dbPath)
-        if (!(Test-Path $dbDir)) {
-            try {
+
+        try {
+            $dbDir = [System.IO.Path]::GetDirectoryName($dbPath)
+            if (!(Test-Path $dbDir)) {
                 New-Item -Path $dbDir -ItemType Directory -Force | Out-Null
-            } catch {
-                throw "Cannot create database directory '$dbDir': $_"
+                Write-Debug "Created database directory: $dbDir"
             }
+        } catch {
+            throw "Cannot create database directory: $_"
         }
 
         # Ensure PSSQLite module is available
         if (-not [FileHashDatabase]::IsModuleAvailable('PSSQLite')) {
             throw "PSSQLite module is required. Install with: Install-Module PSSQLite"
         }
-        Import-Module PSSQLite
 
+        try {
+            Import-Module PSSQLite -ErrorAction Stop
+        } catch {
+            throw "Failed to import PSSQLite module: $_"
+        }
+
+        # Create database schema
         $sqlCreate = @(
             @('Table FileHash', @"
 CREATE TABLE IF NOT EXISTS FileHash (
@@ -99,19 +187,40 @@ MovedFile (SourcePath);
             @('Index MovedFile (Hash, AlgorithmId)', @"
 CREATE INDEX IF NOT EXISTS idx_movedfile_hash_algorithmid ON
 MovedFile (Hash, AlgorithmId);
+"@          ),
+            @('View DeduplicatedFile', @"
+CREATE VIEW IF NOT EXISTS DeduplicatedFile AS
+SELECT
+  fh.Hash
+, a.AlgorithmName AS Algorithm
+, GROUP_CONCAT(fh.FilePath, CHAR(10)) AS FilePaths
+, COUNT(DISTINCT fh.FilePath) AS FileCount
+, MAX(fh.FileSize) AS MaxFileSize
+, MIN(fh.ProcessedAt) AS MinProcessedAt
+, MAX(fh.ProcessedAt) AS MaxProcessedAt
+, COUNT(*) AS RecordCount
+FROM FileHash fh
+JOIN Algorithm a ON fh.AlgorithmId = a.AlgorithmId
+WHERE fh.Hash IS NOT NULL
+GROUP BY fh.Hash, fh.AlgorithmId;
 "@          )
         )
+
         foreach ($sql in $sqlCreate) {
             try {
-                "Executing SQL for {0}" -f $sql[0] | Write-Verbose
+                Write-Verbose "Executing SQL for $($sql[0])"
                 $this.InvokeQuery($sql[1], @{}) | Out-Null
             } catch {
-                throw "Failed to create $($sql[0]) in SQLite database with disparity: $_"
+                throw "Failed to create $($sql[0]) in SQLite database: $_"
             }
         }
+
+        # Populate supported algorithms
+        $supportedAlgorithms = $script:Config.SupportedAlgorithms
         $query = "SELECT AlgorithmName FROM Algorithm"
         $existingAlgorithms = ($this.InvokeQuery($query, @{}) | ForEach-Object {$_.AlgorithmName})
-        foreach ($supportedAlgorithm in $script:Config.SupportedAlgorithms) {
+
+        foreach ($supportedAlgorithm in $supportedAlgorithms) {
             if (-not ($existingAlgorithms -contains $supportedAlgorithm)) {
                 $query = "INSERT INTO Algorithm (AlgorithmName) VALUES (@algorithm);"
                 $this.InvokeQuery($query, @{ algorithm = $supportedAlgorithm }) | Out-Null
@@ -125,6 +234,7 @@ MovedFile (Hash, AlgorithmId);
             $exists = $this.InvokeQuery($query, @{ filepath = $filePath })
             return [bool]$exists
         } catch {
+            Write-Warning "Error checking if file exists in database: $_"
             return $false
         }
     }

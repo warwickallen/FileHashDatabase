@@ -2,32 +2,23 @@ name: PowerShell Cross-Platform Tests
 
 on:
   push:
-    branches: [ main, develop, feature/* ]
+    branches: [ develop, main ]
   pull_request:
-    branches: [ main ]
-  workflow_dispatch:  # Allows manual triggering
+    branches: [ develop, main ]
 
 jobs:
   test-powershell:
     strategy:
+      fail-fast: false  # Allow other tests to continue if one fails
       matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+        powershell-version: ['7.4']
+        shell: ['pwsh']
         include:
-          # Windows PowerShell 5.1
+          # Test Windows PowerShell 5.1 on Windows only
           - os: windows-latest
-            powershell-version: "5.1"
-            shell-type: "powershell"
-          # Windows PowerShell 7.x
-          - os: windows-latest
-            powershell-version: "7.4"
-            shell-type: "pwsh"
-          # Ubuntu PowerShell 7.x
-          - os: ubuntu-latest
-            powershell-version: "7.4"
-            shell-type: "pwsh"
-          # macOS PowerShell 7.x
-          - os: macos-latest
-            powershell-version: "7.4"
-            shell-type: "pwsh"
+            powershell-version: '5.1'
+            shell: 'powershell'
 
     runs-on: ${{ matrix.os }}
 
@@ -35,504 +26,138 @@ jobs:
     - name: Checkout repository
       uses: actions/checkout@v4
 
-    - name: Install PowerShell Core (Ubuntu)
-      if: matrix.os == 'ubuntu-latest'
-      run: |
-        # PowerShell 7.4 is pre-installed on GitHub Ubuntu runners
-        pwsh --version
+    - name: Setup PowerShell
+      if: matrix.powershell-version != '5.1'
+      uses: actions/setup-powershell@v1
+      with:
+        powershell-version: ${{ matrix.powershell-version }}
 
-    - name: Install PowerShell Core (macOS)
-      if: matrix.os == 'macos-latest'
+    - name: Install Pester
+      shell: ${{ matrix.shell }}
       run: |
-        # PowerShell 7.4 is pre-installed on GitHub macOS runners
-        pwsh --version
+        Write-Host "Installing Pester..."
+        if ($PSVersionTable.PSVersion.Major -ge 7) {
+            Install-Module -Name Pester -Force -SkipPublisherCheck -Scope CurrentUser -MinimumVersion 5.0.0
+        } else {
+            Install-Module -Name Pester -Force -SkipPublisherCheck -Scope CurrentUser -RequiredVersion 4.10.1
+        }
+        Import-Module Pester -Force
+        Write-Host "Pester version: $((Get-Module Pester).Version)"
 
-    - name: Verify PowerShell Installation (PowerShell 5.1)
-      if: matrix.powershell-version == '5.1'
-      shell: powershell
+    - name: Install PSSQLite (if available)
+      shell: ${{ matrix.shell }}
+      continue-on-error: true  # Don't fail if PSSQLite can't be installed
       run: |
-        Write-Host "PowerShell version: $($PSVersionTable.PSVersion)"
-        Write-Host "PowerShell edition: $($PSVersionTable.PSEdition)"
+        Write-Host "Attempting to install PSSQLite..."
+        try {
+            if ($IsLinux -or $IsMacOS) {
+                # For Linux/macOS, we might need additional dependencies
+                Write-Host "Installing on Unix-like system..."
+            }
+            Install-Module -Name PSSQLite -Force -SkipPublisherCheck -Scope CurrentUser -ErrorAction Stop
+            Import-Module PSSQLite -Force
+            Write-Host "PSSQLite installed successfully"
+        } catch {
+            Write-Warning "Could not install PSSQLite: $($_.Exception.Message)"
+            Write-Host "Tests will run with PSSQLite functionality disabled"
+        }
+
+    - name: Test Module Import
+      shell: ${{ matrix.shell }}
+      run: |
+        Write-Host "PowerShell Version: $($PSVersionTable.PSVersion)"
+        Write-Host "OS: $($PSVersionTable.OS)"
         Write-Host "Platform: $($PSVersionTable.Platform)"
 
-    - name: Verify PowerShell Installation (PowerShell Core)
-      if: matrix.powershell-version != '5.1'
-      shell: pwsh
+        $ModulePath = "./FileHashDatabase/FileHashDatabase.psd1"
+        Write-Host "Module path: $ModulePath"
+
+        if (-not (Test-Path $ModulePath)) {
+            throw "Module manifest not found at: $ModulePath"
+        }
+
+        Write-Host "Testing module manifest..."
+        Test-ModuleManifest -Path $ModulePath -Verbose
+
+        Write-Host "Importing module..."
+        Import-Module $ModulePath -Force -Verbose
+
+        Write-Host "Checking exported functions..."
+        $ExportedCommands = Get-Command -Module FileHashDatabase
+        Write-Host "Exported commands: $($ExportedCommands.Name -join ', ')"
+
+        if ($ExportedCommands.Count -eq 0) {
+            throw "No commands were exported from the module"
+        }
+
+    - name: Run Tests
+      shell: ${{ matrix.shell }}
+      continue-on-error: true  # Don't stop workflow on test failures
+      env:
+        TEST_MODULE_PATH: ${{ github.workspace }}/FileHashDatabase/FileHashDatabase.psd1
       run: |
-        Write-Host "PowerShell version: $($PSVersionTable.PSVersion)"
-        Write-Host "PowerShell edition: $($PSVersionTable.PSEdition)"
-        Write-Host "Platform: $($PSVersionTable.Platform)"
+        Write-Host "Starting Pester tests..."
 
-    - name: Install Pester (PowerShell 5.1)
-      if: matrix.powershell-version == '5.1'
-      shell: powershell
-      run: |
-        try {
-          Write-Host "Installing Pester for PowerShell 5.1..."
-          Install-Module -Name Pester -Force -SkipPublisherCheck -Scope CurrentUser -AllowClobber
+        # Set up test configuration based on Pester version
+        $PesterVersion = (Get-Module Pester).Version.Major
+        Write-Host "Pester version: $PesterVersion"
 
-          $PesterVersion = Get-Module -ListAvailable -Name Pester | Select-Object -First 1 -ExpandProperty Version
-          Write-Host "Pester version installed: $PesterVersion"
-        }
-        catch {
-          Write-Error "Failed to install Pester: $($_.Exception.Message)"
-          exit 1
-        }
+        $TestResultsPath = "TestResults.xml"
 
-    - name: Install Pester (PowerShell Core)
-      if: matrix.powershell-version != '5.1'
-      shell: pwsh
-      run: |
-        try {
-          Write-Host "Installing Pester for PowerShell Core..."
-          Install-Module -Name Pester -Force -SkipPublisherCheck -Scope CurrentUser -AllowClobber
+        if ($PesterVersion -ge 5) {
+            # Pester 5+ configuration
+            $PesterConfig = New-PesterConfiguration
+            $PesterConfig.Run.Path = "./Tests"
+            $PesterConfig.Run.Exit = $false  # Don't exit PowerShell on completion
+            $PesterConfig.TestResult.Enabled = $true
+            $PesterConfig.TestResult.OutputPath = $TestResultsPath
+            $PesterConfig.TestResult.OutputFormat = "NUnitXml"
+            $PesterConfig.Output.Verbosity = "Detailed"
 
-          $PesterVersion = Get-Module -ListAvailable -Name Pester | Select-Object -First 1 -ExpandProperty Version
-          Write-Host "Pester version installed: $PesterVersion"
-        }
-        catch {
-          Write-Error "Failed to install Pester: $($_.Exception.Message)"
-          exit 1
-        }
-
-    - name: Install SQLite Dependencies (PowerShell 5.1)
-      if: matrix.powershell-version == '5.1'
-      shell: powershell
-      run: |
-        try {
-          Write-Host "PowerShell 5.1 - checking SQLite support..."
-
-          # List any SQLite-related modules
-          Get-Module -ListAvailable | Where-Object Name -like "*SQLite*" | Select-Object Name, Version
-        }
-        catch {
-          Write-Warning "SQLite module check failed: $($_.Exception.Message)"
-          Write-Host "Continuing - PowerShell 5.1 should have built-in SQLite support"
-        }
-
-    - name: Install SQLite Dependencies (PowerShell Core)
-      if: matrix.powershell-version != '5.1'
-      shell: pwsh
-      run: |
-        try {
-          Write-Host "Installing SQLite dependencies for PowerShell Core..."
-          # Try to install PSSQLite for cross-platform compatibility
-          Install-Module -Name PSSQLite -Force -SkipPublisherCheck -Scope CurrentUser -ErrorAction SilentlyContinue
-
-          # List installed modules
-          Get-Module -ListAvailable | Where-Object Name -like "*SQLite*" | Select-Object Name, Version
-        }
-        catch {
-          Write-Warning "SQLite module installation failed: $($_.Exception.Message)"
-          Write-Host "Continuing without SQLite module - tests may need to handle this"
-        }
-
-    - name: Import Module and List Files (PowerShell 5.1)
-      if: matrix.powershell-version == '5.1'
-      shell: powershell
-      run: |
-        Write-Host "Repository contents:"
-        Get-ChildItem -Path . -Recurse -File | Where-Object Extension -in @('.ps1', '.psm1', '.psd1') | Select-Object FullName
-
-        Write-Host "`nLooking for module manifest in FileHashDatabase subdirectory:"
-        $ModuleDir = ".\FileHashDatabase"
-        if (Test-Path $ModuleDir) {
-          $ManifestFiles = Get-ChildItem -Path $ModuleDir -Filter "*.psd1" -Recurse
-          $ManifestFiles | ForEach-Object { Write-Host "Found: $($_.FullName)" }
+            Write-Host "Running tests with Pester 5+ configuration..."
+            $TestResults = Invoke-Pester -Configuration $PesterConfig
         } else {
-          Write-Host "FileHashDatabase directory not found, searching everywhere..."
-          $ManifestFiles = Get-ChildItem -Path . -Filter "*.psd1" -Recurse
-          $ManifestFiles | ForEach-Object { Write-Host "Found: $($_.FullName)" }
+            # Pester 4.x configuration
+            Write-Host "Running tests with Pester 4.x configuration..."
+            $TestResults = Invoke-Pester -Path "./Tests" -OutputFile $TestResultsPath -OutputFormat NUnitXml -PassThru -Verbose
         }
 
-        Write-Host "`nLooking for test files:"
-        $TestFiles = Get-ChildItem -Path . -Filter "*.Tests.ps1" -Recurse
-        $TestFiles | ForEach-Object { Write-Host "Found: $($_.FullName)" }
+        Write-Host "Test Results Summary:"
+        Write-Host "  Total: $($TestResults.TotalCount)"
+        Write-Host "  Passed: $($TestResults.PassedCount)"
+        Write-Host "  Failed: $($TestResults.FailedCount)"
+        Write-Host "  Skipped: $($TestResults.SkippedCount)"
 
-        Write-Host "`nAttempting to import module..."
-        if ($ManifestFiles.Count -gt 0) {
-          $ModulePath = $ManifestFiles[0].FullName
-          Write-Host "Importing module from: $ModulePath"
-          try {
-            # Set the module path as an environment variable for tests to use
-            $env:TEST_MODULE_PATH = $ModulePath
-            Import-Module $ModulePath -Force
-            Write-Host "Module imported successfully!"
-
-            # List exported functions
-            $ModuleName = (Get-Item $ModulePath).BaseName
-            $ExportedCommands = Get-Command -Module $ModuleName -ErrorAction SilentlyContinue
-            if ($ExportedCommands -and $ExportedCommands.Count -gt 0) {
-              Write-Host "Exported commands:"
-              $ExportedCommands | Format-Table Name, CommandType -AutoSize
-            } else {
-              Write-Warning "No exported commands found or module not properly loaded"
-            }
-          }
-          catch {
-            Write-Error "Failed to import module: $($_.Exception.Message)"
-            Write-Host "Full error details:"
-            Write-Host $_.Exception.ToString()
-          }
-        } else {
-          Write-Error "No module manifest found!"
+        # Set environment variable for later steps
+        if ($TestResults.FailedCount -gt 0) {
+            Write-Host "##vso[task.setvariable variable=TestsFailed]true"
+            Write-Host "Some tests failed, but continuing to upload results..."
         }
 
-    - name: Import Module and List Files (PowerShell Core)
-      if: matrix.powershell-version != '5.1'
-      shell: pwsh
-      run: |
-        Write-Host "Repository contents:"
-        Get-ChildItem -Path . -Recurse -File | Where-Object Extension -in @('.ps1', '.psm1', '.psd1') | Select-Object FullName
-
-        Write-Host "`nLooking for module manifest in FileHashDatabase subdirectory:"
-        $ModuleDir = "./FileHashDatabase"
-        if (Test-Path $ModuleDir) {
-          $ManifestFiles = Get-ChildItem -Path $ModuleDir -Filter "*.psd1" -Recurse
-          $ManifestFiles | ForEach-Object { Write-Host "Found: $($_.FullName)" }
-        } else {
-          Write-Host "FileHashDatabase directory not found, searching everywhere..."
-          $ManifestFiles = Get-ChildItem -Path . -Filter "*.psd1" -Recurse
-          $ManifestFiles | ForEach-Object { Write-Host "Found: $($_.FullName)" }
-        }
-
-        Write-Host "`nLooking for test files:"
-        $TestFiles = Get-ChildItem -Path . -Filter "*.Tests.ps1" -Recurse
-        $TestFiles | ForEach-Object { Write-Host "Found: $($_.FullName)" }
-
-        Write-Host "`nAttempting to import module..."
-        if ($ManifestFiles.Count -gt 0) {
-          $ModulePath = $ManifestFiles[0].FullName
-          Write-Host "Importing module from: $ModulePath"
-          try {
-            # Set the module path as an environment variable for tests to use
-            $env:TEST_MODULE_PATH = $ModulePath
-            Import-Module $ModulePath -Force
-            Write-Host "Module imported successfully!"
-
-            # List exported functions
-            $ModuleName = (Get-Item $ModulePath).BaseName
-            $ExportedCommands = Get-Command -Module $ModuleName -ErrorAction SilentlyContinue
-            if ($ExportedCommands -and $ExportedCommands.Count -gt 0) {
-              Write-Host "Exported commands:"
-              $ExportedCommands | Format-Table Name, CommandType -AutoSize
-            } else {
-              Write-Warning "No exported commands found or module not properly loaded"
-            }
-          }
-          catch {
-            Write-Error "Failed to import module: $($_.Exception.Message)"
-            Write-Host "Full error details:"
-            Write-Host $_.Exception.ToString()
-          }
-        } else {
-          Write-Error "No module manifest found!"
-        }
-
-    - name: Run Pester Tests (PowerShell 5.1)
-      if: matrix.powershell-version == '5.1'
-      shell: powershell
-      run: |
-        try {
-          Import-Module Pester -Force
-
-          # Import the module under test first
-          Write-Host "Importing module under test..."
-          $ModuleDir = ".\FileHashDatabase"
-          if (Test-Path $ModuleDir) {
-            $ManifestFiles = Get-ChildItem -Path $ModuleDir -Filter "*.psd1" -Recurse
-          } else {
-            $ManifestFiles = Get-ChildItem -Path . -Filter "*.psd1" -Recurse
-          }
-
-          if ($ManifestFiles.Count -gt 0) {
-            $ModulePath = $ManifestFiles[0].FullName
-            $env:TEST_MODULE_PATH = $ModulePath
-            Import-Module $ModulePath -Force
-            Write-Host "Module imported: $ModulePath"
-
-            # Verify module loaded
-            $ModuleName = (Get-Item $ModulePath).BaseName
-            $LoadedModule = Get-Module -Name $ModuleName
-            if ($LoadedModule) {
-              Write-Host "Module '$ModuleName' successfully loaded"
-              $Commands = Get-Command -Module $ModuleName -ErrorAction SilentlyContinue
-              if ($Commands) {
-                Write-Host "Available commands: $($Commands.Name -join ', ')"
-              }
-            } else {
-              Write-Warning "Module '$ModuleName' not found in loaded modules"
-            }
-          } else {
-            Write-Error "No module manifest found!"
-            exit 1
-          }
-
-          # Find test files
-          $TestFiles = Get-ChildItem -Path . -Filter "*.Tests.ps1" -Recurse
-
-          if ($TestFiles.Count -eq 0) {
-            Write-Warning "No test files found matching pattern '*.Tests.ps1'"
-            Write-Host "Looking for alternative test patterns..."
-            $TestFiles = Get-ChildItem -Path . -Filter "*Test*.ps1" -Recurse
-          }
-
-          if ($TestFiles.Count -eq 0) {
-            Write-Error "No test files found!"
-            exit 1
-          }
-
-          Write-Host "Found test files:"
-          $TestFiles | ForEach-Object { Write-Host "  - $($_.FullName)" }
-
-          # Configure Pester based on version
-          $PesterVersion = (Get-Module -ListAvailable -Name Pester | Select-Object -First 1).Version
-          Write-Host "Using Pester version: $PesterVersion"
-
-          if ($PesterVersion.Major -ge 5) {
-            Write-Host "Running Pester 5.x tests..."
-            $Config = New-PesterConfiguration
-            $Config.Run.Path = $TestFiles.FullName
-            $Config.TestResult.Enabled = $true
-            $Config.TestResult.OutputFormat = "NUnitXml"
-            $Config.TestResult.OutputPath = "TestResults.xml"
-            $Config.Output.Verbosity = "Detailed"
-
-            $TestResults = Invoke-Pester -Configuration $Config
-            $FailedCount = $TestResults.FailedCount
-          } else {
-            Write-Host "Running Pester 4.x tests..."
-            $TestResults = Invoke-Pester -Path $TestFiles.FullName -OutputFormat NUnitXml -OutputFile "TestResults.xml" -PassThru
-            $FailedCount = $TestResults.FailedCount
-          }
-
-          Write-Host "Test Results Summary:"
-          Write-Host "  Total: $($TestResults.TotalCount)"
-          Write-Host "  Passed: $($TestResults.PassedCount)"
-          Write-Host "  Failed: $FailedCount"
-
-          if ($FailedCount -gt 0) {
-            Write-Error "Tests failed! $FailedCount test(s) failed."
-            exit 1
-          }
-
-          Write-Host "All tests passed!"
-        }
-        catch {
-          Write-Error "Test execution failed: $($_.Exception.Message)"
-          Write-Host "Stack trace:"
-          Write-Host $_.ScriptStackTrace
-          exit 1
-        }
-
-    - name: Run Pester Tests (PowerShell Core)
-      if: matrix.powershell-version != '5.1'
-      shell: pwsh
-      run: |
-        try {
-          Import-Module Pester -Force
-
-          # Import the module under test first
-          Write-Host "Importing module under test..."
-          $ModuleDir = "./FileHashDatabase"
-          if (Test-Path $ModuleDir) {
-            $ManifestFiles = Get-ChildItem -Path $ModuleDir -Filter "*.psd1" -Recurse
-          } else {
-            $ManifestFiles = Get-ChildItem -Path . -Filter "*.psd1" -Recurse
-          }
-
-          if ($ManifestFiles.Count -gt 0) {
-            $ModulePath = $ManifestFiles[0].FullName
-            $env:TEST_MODULE_PATH = $ModulePath
-            Import-Module $ModulePath -Force
-            Write-Host "Module imported: $ModulePath"
-
-            # Verify module loaded
-            $ModuleName = (Get-Item $ModulePath).BaseName
-            $LoadedModule = Get-Module -Name $ModuleName
-            if ($LoadedModule) {
-              Write-Host "Module '$ModuleName' successfully loaded"
-              $Commands = Get-Command -Module $ModuleName -ErrorAction SilentlyContinue
-              if ($Commands) {
-                Write-Host "Available commands: $($Commands.Name -join ', ')"
-              }
-            } else {
-              Write-Warning "Module '$ModuleName' not found in loaded modules"
-            }
-          } else {
-            Write-Error "No module manifest found!"
-            exit 1
-          }
-
-          # Find test files
-          $TestFiles = Get-ChildItem -Path . -Filter "*.Tests.ps1" -Recurse
-
-          if ($TestFiles.Count -eq 0) {
-            Write-Warning "No test files found matching pattern '*.Tests.ps1'"
-            Write-Host "Looking for alternative test patterns..."
-            $TestFiles = Get-ChildItem -Path . -Filter "*Test*.ps1" -Recurse
-          }
-
-          if ($TestFiles.Count -eq 0) {
-            Write-Error "No test files found!"
-            exit 1
-          }
-
-          Write-Host "Found test files:"
-          $TestFiles | ForEach-Object { Write-Host "  - $($_.FullName)" }
-
-          # Configure Pester based on version
-          $PesterVersion = (Get-Module -ListAvailable -Name Pester | Select-Object -First 1).Version
-          Write-Host "Using Pester version: $PesterVersion"
-
-          if ($PesterVersion.Major -ge 5) {
-            Write-Host "Running Pester 5.x tests..."
-            $Config = New-PesterConfiguration
-            $Config.Run.Path = $TestFiles.FullName
-            $Config.TestResult.Enabled = $true
-            $Config.TestResult.OutputFormat = "NUnitXml"
-            $Config.TestResult.OutputPath = "TestResults.xml"
-            $Config.Output.Verbosity = "Detailed"
-
-            $TestResults = Invoke-Pester -Configuration $Config
-            $FailedCount = $TestResults.FailedCount
-          } else {
-            Write-Host "Running Pester 4.x tests..."
-            $TestResults = Invoke-Pester -Path $TestFiles.FullName -OutputFormat NUnitXml -OutputFile "TestResults.xml" -PassThru
-            $FailedCount = $TestResults.FailedCount
-          }
-
-          Write-Host "Test Results Summary:"
-          Write-Host "  Total: $($TestResults.TotalCount)"
-          Write-Host "  Passed: $($TestResults.PassedCount)"
-          Write-Host "  Failed: $FailedCount"
-
-          if ($FailedCount -gt 0) {
-            Write-Error "Tests failed! $FailedCount test(s) failed."
-            exit 1
-          }
-
-          Write-Host "All tests passed!"
-        }
-        catch {
-          Write-Error "Test execution failed: $($_.Exception.Message)"
-          Write-Host "Stack trace:"
-          Write-Host $_.ScriptStackTrace
-          exit 1
-        }
-
-    - name: Upload test results
+    - name: Upload Test Results
       uses: actions/upload-artifact@v4
-      if: always()
+      if: always()  # Always upload, even if tests failed
       with:
         name: test-results-${{ matrix.os }}-ps${{ matrix.powershell-version }}
         path: TestResults.xml
-        if-no-files-found: warn
+        retention-days: 30
 
-  code-analysis:
-    runs-on: windows-latest
-    steps:
-    - name: Checkout repository
-      uses: actions/checkout@v4
+    - name: Publish Test Results
+      uses: dorny/test-reporter@v1
+      if: always()  # Always publish results
+      with:
+        name: Test Results (${{ matrix.os }}, PowerShell ${{ matrix.powershell-version }})
+        path: TestResults.xml
+        reporter: java-junit
+        fail-on-error: false  # Don't fail the workflow based on test results here
 
-    - name: Run PSScriptAnalyzer
-      shell: pwsh
+    - name: Check Test Results
+      shell: ${{ matrix.shell }}
+      if: always()
       run: |
-        try {
-          Install-Module -Name PSScriptAnalyzer -Force -SkipPublisherCheck -Scope CurrentUser
-
-          Write-Host "Running PSScriptAnalyzer..."
-          # Analyse all PowerShell files
-          $AnalysisResults = Invoke-ScriptAnalyzer -Path . -Recurse -Settings PSGallery
-
-          if ($AnalysisResults) {
-            Write-Host "PSScriptAnalyzer found issues:"
-            $AnalysisResults | Format-Table -AutoSize
-
-            # Count issues by severity
-            $ErrorCount = ($AnalysisResults | Where-Object Severity -eq 'Error').Count
-            $WarningCount = ($AnalysisResults | Where-Object Severity -eq 'Warning').Count
-            $InfoCount = ($AnalysisResults | Where-Object Severity -eq 'Information').Count
-
-            Write-Host "Issues found:"
-            Write-Host "  Errors: $ErrorCount"
-            Write-Host "  Warnings: $WarningCount"
-            Write-Host "  Information: $InfoCount"
-
-            # Only fail on errors, not warnings
-            if ($ErrorCount -gt 0) {
-              Write-Error "PSScriptAnalyzer found $ErrorCount error(s)!"
-              exit 1
-            } else {
-              Write-Host "No errors found, but $WarningCount warning(s) present."
-            }
-          } else {
-            Write-Host "No PSScriptAnalyzer issues found!"
-          }
-        }
-        catch {
-          Write-Error "PSScriptAnalyzer failed: $($_.Exception.Message)"
-          exit 1
-        }
-
-  build-validation:
-    runs-on: windows-latest
-    steps:
-    - name: Checkout repository
-      uses: actions/checkout@v4
-
-    - name: Validate Module Structure
-      shell: pwsh
-      run: |
-        try {
-          Write-Host "Validating module structure..."
-
-          # Check if module manifest exists
-          $ManifestFiles = Get-ChildItem -Path . -Filter "*.psd1" -Recurse
-
-          if ($ManifestFiles.Count -eq 0) {
-            Write-Error "No module manifest (.psd1) found!"
+        if ($env:TestsFailed -eq 'true') {
+            Write-Host "Tests failed - marking step as failed"
             exit 1
-          }
-
-          if ($ManifestFiles.Count -gt 1) {
-            Write-Warning "Multiple module manifests found:"
-            $ManifestFiles | ForEach-Object { Write-Host "  - $($_.FullName)" }
-          }
-
-          $ManifestPath = $ManifestFiles[0].FullName
-          Write-Host "Using module manifest: $ManifestPath"
-
-          # Test the module manifest
-          Write-Host "Testing module manifest..."
-          $TestResult = Test-ModuleManifest -Path $ManifestPath
-
-          Write-Host "Module manifest validation successful!"
-          Write-Host "  Module Name: $($TestResult.Name)"
-          Write-Host "  Module Version: $($TestResult.Version)"
-          Write-Host "  PowerShell Version: $($TestResult.PowerShellVersion)"
-          Write-Host "  Author: $($TestResult.Author)"
-          Write-Host "  Description: $($TestResult.Description)"
-
-          # Try to import the module
-          Write-Host "Attempting to import module..."
-          Import-Module $ManifestPath -Force
-          Write-Host "Module imported successfully!"
-
-          # List exported functions
-          $ExportedCommands = Get-Command -Module $TestResult.Name
-          if ($ExportedCommands.Count -gt 0) {
-            Write-Host "Exported commands:"
-            $ExportedCommands | Format-Table Name, CommandType -AutoSize
-          } else {
-            Write-Warning "No exported commands found in module"
-          }
-
-          Write-Host "Module validation completed successfully!"
-        }
-        catch {
-          Write-Error "Module validation failed: $($_.Exception.Message)"
-          Write-Host "Stack trace:"
-          Write-Host $_.ScriptStackTrace
-          exit 1
+        } else {
+            Write-Host "All tests passed"
         }

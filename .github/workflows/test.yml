@@ -24,11 +24,23 @@ jobs:
     - name: Checkout repository
       uses: actions/checkout@v4
 
-    - name: Setup PowerShell
-      if: matrix.powershell-version != '5.1'
-      uses: actions/setup-powershell@v1
-      with:
-        powershell-version: ${{ matrix.powershell-version }}
+    - name: Verify PowerShell Installation
+      shell: pwsh
+      run: |
+        Write-Host "PowerShell Version: $($PSVersionTable.PSVersion)"
+        Write-Host "PowerShell Edition: $($PSVersionTable.PSEdition)"
+        Write-Host "OS: $($PSVersionTable.OS)"
+        if ($PSVersionTable.PSVersion.Major -ge 6) {
+          Write-Host "Platform: $($PSVersionTable.Platform)"
+        }
+
+    - name: Verify PowerShell 5.1 (Windows only)
+      if: matrix.powershell-version == '5.1'
+      shell: powershell
+      run: |
+        Write-Host "PowerShell Version: $($PSVersionTable.PSVersion)"
+        Write-Host "PowerShell Edition: $($PSVersionTable.PSEdition)"
+        Write-Host "OS: $($PSVersionTable.OS)"
 
     - name: Install Pester
       shell: pwsh
@@ -57,9 +69,14 @@ jobs:
       run: |
         Write-Host "Attempting to install PSSQLite..."
         try {
-            if ($IsLinux -or $IsMacOS) {
-                # For Linux/macOS, we might need additional dependencies
-                Write-Host "Installing on Unix-like system..."
+            if ($PSVersionTable.PSVersion.Major -ge 6) {
+                if (Get-Variable -Name 'IsLinux' -ErrorAction SilentlyContinue -ValueOnly) {
+                    Write-Host "Installing on Linux system..."
+                } elseif (Get-Variable -Name 'IsMacOS' -ErrorAction SilentlyContinue -ValueOnly) {
+                    Write-Host "Installing on macOS system..."
+                } else {
+                    Write-Host "Installing on Windows system..."
+                }
             }
             Install-Module -Name PSSQLite -Force -SkipPublisherCheck -Scope CurrentUser -ErrorAction Stop
             Import-Module PSSQLite -Force
@@ -88,8 +105,10 @@ jobs:
       shell: pwsh
       run: |
         Write-Host "PowerShell Version: $($PSVersionTable.PSVersion)"
-        Write-Host "OS: $($PSVersionTable.OS)"
-        Write-Host "Platform: $($PSVersionTable.Platform)"
+        Write-Host "PowerShell Edition: $($PSVersionTable.PSEdition)"
+        if ($PSVersionTable.PSVersion.Major -ge 6) {
+          Write-Host "Platform: $($PSVersionTable.Platform)"
+        }
 
         $ModulePath = "./FileHashDatabase/FileHashDatabase.psd1"
         Write-Host "Module path: $ModulePath"
@@ -117,7 +136,7 @@ jobs:
       shell: powershell
       run: |
         Write-Host "PowerShell Version: $($PSVersionTable.PSVersion)"
-        Write-Host "OS: $($PSVersionTable.OS)"
+        Write-Host "PowerShell Edition: $($PSVersionTable.PSEdition)"
 
         $ModulePath = "./FileHashDatabase/FileHashDatabase.psd1"
         Write-Host "Module path: $ModulePath"

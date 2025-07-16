@@ -23,64 +23,192 @@ $script:Config = @{
     )
 }
 
-# Use using module for reliable class loading across all PowerShell platforms
-# This approach works better than dot-sourcing for classes
-$classModulePath = Join-Path $PSScriptRoot 'Private' 'FileHashDatabase.ps1'
-
-if (Test-Path $classModulePath) {
-    # For PowerShell 5.1 and later - use using module with dynamic path
-    # We need to handle this carefully for cross-platform compatibility
-    try {
-        # Method 1: Try using module (PowerShell 5.1+)
-        Import-Module $classModulePath -Global -Force -Verbose:$false
-        Write-Verbose "FileHashDatabase class loaded via Import-Module"
-    } catch {
-        try {
-            # Method 2: Fallback to dot-sourcing with explicit class declaration
-            . $classModulePath
-            
-            # Verify the class is available
-            if (-not ([System.Management.Automation.PSTypeName]'FileHashDatabase').Type) {
-                throw "FileHashDatabase class not properly loaded"
-            }
-            Write-Verbose "FileHashDatabase class loaded via dot-sourcing"
-        } catch {
-            # Method 3: Last resort - load with Add-Type if the class is defined as a string
-            Write-Warning "Standard class loading failed: $($_.Exception.Message)"
-            throw "Cannot load FileHashDatabase class: $_"
+# Robust way to determine the module root directory
+# This handles cases where $PSScriptRoot might be empty in PowerShell 5.1
+function Get-ModuleRoot {
+    # Method 1: Try $PSScriptRoot (works in most cases)
+    if ($PSScriptRoot -and (Test-Path $PSScriptRoot)) {
+        return $PSScriptRoot
+    }
+    
+    # Method 2: Try $MyInvocation.MyCommand.Path (fallback for PS 5.1)
+    if ($MyInvocation.MyCommand.Path) {
+        return Split-Path $MyInvocation.MyCommand.Path -Parent
+    }
+    
+    # Method 3: Use the module's path from Get-Module (if already loaded)
+    $thisModule = Get-Module -Name FileHashDatabase
+    if ($thisModule -and $thisModule.Path) {
+        return Split-Path $thisModule.Path -Parent
+    }
+    
+    # Method 4: Try to find the module manifest in the call stack
+    $callStack = Get-PSCallStack
+    foreach ($frame in $callStack) {
+        if ($frame.ScriptName -and $frame.ScriptName -like "*FileHashDatabase.psm1") {
+            return Split-Path $frame.ScriptName -Parent
         }
     }
-} else {
-    throw "Cannot find required class file: $classModulePath"
+    
+    # Method 5: Last resort - look for the manifest file relative to current location
+    $possiblePaths = @(
+        ".",
+        "..",
+        ".\FileHashDatabase",
+        "..\FileHashDatabase"
+    )
+    
+    foreach ($path in $possiblePaths) {
+        $manifestPath = Join-Path $path "FileHashDatabase.psd1"
+        if (Test-Path $manifestPath) {
+            return (Resolve-Path $path).Path
+        }
+    }
+    
+    # If all else fails, throw an informative error
+    throw @"
+Cannot determine module root directory. Tried the following methods:
+1. PSScriptRoot: '$PSScriptRoot'
+2. MyInvocation.MyCommand.Path: '$($MyInvocation.MyCommand.Path)'
+3. Get-Module path lookup
+4. Call stack analysis
+5. Relative path search
+
+Please ensure the module is properly structured and try importing with an absolute path.
+"@
 }
 
-# Load public functions with error handling
-$publicFunctionPath = Join-Path $PSScriptRoot 'Public'
+# Get the module root using our robust function
+try {
+    $script:ModuleRoot = Get-ModuleRoot
+    Write-Verbose "Module root determined as: $script:ModuleRoot"
+} catch {
+    Write-Error "Failed to determine module root: $_"
+    throw
+}
+
+# Load the FileHashDatabase class with multiple fallback strategies
+$classModulePath = Join-Path $script:ModuleRoot 'Private' 'FileHashDatabase.ps1'
+
+if (Test-Path $classModulePath) {
+    Write-Verbose "Loading FileHashDatabase class from: $classModulePath"
+    
+    try {
+        # Method 1: Try Import-Module (PowerShell 5.1+)
+        Import-Module $classModulePath -Global -Force -Verbose:$false -ErrorAction Stop
+        Write-Verbose "FileHashDatabase class loaded via Import-Module"
+        $classLoaded = $true
+    } catch {
+        Write-Verbose "Import-Module failed: $($_.Exception.Message)"
+        $classLoaded = $false
+    }
+    
+    if (-not $classLoaded) {
+        try {
+            # Method 2: Fallback to dot-sourcing
+            . $classModulePath
+            
+            # Verify the class is available by trying to get its type
+            $classType = [FileHashDatabase] -as [type]
+            if (-not $classType) {
+                throw "FileHashDatabase class not found after dot-sourcing"
+            }
+            
+            Write-Verbose "FileHashDatabase class loaded via dot-sourcing"
+            $classLoaded = $true
+        } catch {
+            Write-Verbose "Dot-sourcing failed: $($_.Exception.Message)"
+            $classLoaded = $false
+        }
+    }
+    
+    if (-not $classLoaded) {
+        # Method 3: Try using Add-Type with the file content (last resort)
+        try {
+            Write-Warning "Standard class loading methods failed. Attempting alternative loading..."
+            $classContent = Get-Content $classModulePath -Raw
+            
+            # Remove any using statements that might cause issues
+            $classContent = $classContent -replace 'using\s+.*', ''
+            
+            # This is a more complex fallback - you might need to adjust based on your class definition
+            Invoke-Expression $classContent
+            
+            # Verify the class is available
+            $classType = [FileHashDatabase] -as [type]
+            if ($classType) {
+                Write-Verbose "FileHashDatabase class loaded via Invoke-Expression"
+                $classLoaded = $true
+            }
+        } catch {
+            Write-Verbose "Alternative loading failed: $($_.Exception.Message)"
+            $classLoaded = $false
+        }
+    }
+    
+    if (-not $classLoaded) {
+        Write-Warning @"
+Failed to load FileHashDatabase class using all available methods:
+1. Import-Module
+2. Dot-sourcing
+3. Invoke-Expression
+
+Some functionality may not be available. The module will still load public functions.
+Class file location: $classModulePath
+"@
+    }
+} else {
+    Write-Warning "Cannot find required class file: $classModulePath"
+}
+
+# Load public functions with robust error handling
+$publicFunctionPath = Join-Path $script:ModuleRoot 'Public'
+
 if (Test-Path $publicFunctionPath) {
+    Write-Verbose "Loading public functions from: $publicFunctionPath"
+    
+    $loadedFunctions = @()
+    $failedFunctions = @()
+    
     Get-ChildItem -Path $publicFunctionPath -Filter "*.ps1" | ForEach-Object {
         try {
+            Write-Verbose "Loading function: $($_.Name)"
             . $_.FullName
-            Write-Verbose "Loaded function: $($_.BaseName)"
+            $loadedFunctions += $_.BaseName
         } catch {
-            Write-Error "Failed to load function $($_.Name): $_"
-            throw
+            Write-Warning "Failed to load function $($_.Name): $_"
+            $failedFunctions += $_.BaseName
         }
+    }
+    
+    Write-Verbose "Successfully loaded functions: $($loadedFunctions -join ', ')"
+    if ($failedFunctions.Count -gt 0) {
+        Write-Warning "Failed to load functions: $($failedFunctions -join ', ')"
     }
 } else {
     throw "Cannot find Public functions directory: $publicFunctionPath"
 }
 
-# Verify the FileHashDatabase class is accessible
-try {
-    $testInstance = [FileHashDatabase]::new($null)
-    $testInstance = $null  # Clean up
-    Write-Verbose "FileHashDatabase class verified successfully"
-    
-    # Export the class type for external use
-    Export-ModuleMember -Variable Config
-} catch {
-    Write-Warning "FileHashDatabase class verification failed: $_"
-    Write-Warning "Some functionality may not be available"
+# Verify the FileHashDatabase class is accessible (if it was loaded)
+if ($classLoaded) {
+    try {
+        # Try to create a test instance to verify the class works
+        $testDbPath = Join-Path ([System.IO.Path]::GetTempPath()) "ModuleLoadTest_$(Get-Random).db"
+        $testInstance = [FileHashDatabase]::new($testDbPath)
+        
+        if ($testInstance) {
+            Write-Verbose "FileHashDatabase class verified successfully"
+            $testInstance = $null
+            
+            # Clean up test database
+            if (Test-Path $testDbPath) {
+                Remove-Item $testDbPath -Force -ErrorAction SilentlyContinue
+            }
+        }
+    } catch {
+        Write-Warning "FileHashDatabase class verification failed: $_"
+        Write-Warning "Class-dependent functionality may not work properly"
+    }
 }
 
 # Export functions (this should match your manifest)
@@ -89,3 +217,8 @@ Export-ModuleMember -Function @(
     'Move-FileHashDuplicates', 
     'Write-FileHashes'
 )
+
+# Export the Config variable for use by functions
+Export-ModuleMember -Variable Config
+
+Write-Verbose "FileHashDatabase module loaded successfully"

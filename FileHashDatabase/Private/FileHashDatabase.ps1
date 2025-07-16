@@ -1,4 +1,4 @@
-# FileHashDatabase.ps1 - PowerShell 5.1 Compatible Version
+# FileHashDatabase.ps1 - PowerShell 5.1 Fully Compatible Version
 
 # Check if we're in a module context and adjust accordingly
 $script:ModuleRoot = if ($PSScriptRoot) { 
@@ -7,13 +7,29 @@ $script:ModuleRoot = if ($PSScriptRoot) {
     $PWD 
 }
 
-# Define the class with better cross-platform compatibility
+# Define the class with PowerShell 5.1 compatibility
 class FileHashDatabase {
     static [string] $DatabasePath
     
     # Static constructor equivalent - initialize default path
     static FileHashDatabase() {
-        if ($IsWindows -or $env:OS -eq 'Windows_NT' -or -not $env:HOME) {
+        # PowerShell 5.1 compatible platform detection
+        # $IsWindows doesn't exist in PS 5.1, so we use other methods
+        $isWindowsPlatform = $true
+        
+        # Check if we're on a non-Windows platform
+        if ($PSVersionTable.PSVersion.Major -ge 6) {
+            # PowerShell 6+ has the automatic variables
+            if (Get-Variable -Name 'IsWindows' -ErrorAction SilentlyContinue) {
+                $isWindowsPlatform = $IsWindows
+            }
+        } else {
+            # PowerShell 5.1 - assume Windows unless proven otherwise
+            # In PS 5.1, we're almost certainly on Windows
+            $isWindowsPlatform = $true
+        }
+        
+        if ($isWindowsPlatform -or $env:OS -eq 'Windows_NT' -or -not $env:HOME) {
             # Windows path
             [FileHashDatabase]::DatabasePath = [System.IO.Path]::Combine($env:APPDATA, "FileHashDatabase", "FileHashes.db")
         } else {

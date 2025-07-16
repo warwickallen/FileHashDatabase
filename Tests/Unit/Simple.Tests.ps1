@@ -8,9 +8,15 @@ BeforeAll {
     } else {
         # Fallback for local testing - look in the grandparent directory's src subdirectory
         $TestsRoot = Split-Path $PSScriptRoot -Parent
+        Write-Debug "     TestsRoot                      = '$TestsRoot'"
         $RepositoryRoot = Split-Path $TestsRoot -Parent
+        Write-Debug "RepositoryRoot (first  calculation) = '$RepositoryRoot'"
+        $RepositoryRoot = Split-Path (Split-Path $PSScriptRoot -Parent) -Parent
+        Write-Debug "RepositoryRoot (second calculation) = '$RepositoryRoot'"
         $ModuleDirectory = Join-Path $RepositoryRoot "src"
+        Write-Debug "ModuleDirectory                     = '$ModuleDirectory'"
         $ModuleManifest = Get-ChildItem -Path $ModuleDirectory -Filter "*.psd1" -Recurse | Select-Object -First 1
+        Write-Debug "ModuleManifest                      = '$ModuleManifest'"
         if ($ModuleManifest) {
             $ModulePath = $ModuleManifest.FullName
         }

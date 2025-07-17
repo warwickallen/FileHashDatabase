@@ -7,7 +7,6 @@ on:
 
 jobs:
   test:
-    runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
@@ -17,6 +16,8 @@ jobs:
           - os: windows-latest
             powershell-version: 5.1
             shell: powershell
+    
+    runs-on: ${{ matrix.os }}
 
     steps:
     - name: Checkout code
@@ -32,7 +33,7 @@ jobs:
         key: ${{ runner.os }}-powershell-${{ matrix.powershell-version }}-${{ hashFiles('src/FileHashDatabase.psd1') }}
 
     - name: Install required modules
-      shell: ${{ startsWith(matrix.os, 'windows') && matrix.powershell-version == '5.1' && 'powershell' || 'pwsh' }}
+      shell: ${{ matrix.shell || 'pwsh' }}
       run: |
         Set-PSRepository PSGallery -InstallationPolicy Trusted
         Install-Module -Name Pester -RequiredVersion 5.6.0 -Force -Scope CurrentUser

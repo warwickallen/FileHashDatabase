@@ -6,9 +6,10 @@ BeforeAll {
         $ModuleManifest = Get-Item $ModulePath
         $ModuleDirectory = Split-Path $ModulePath -Parent
     } else {
-        # Fallback for local testing - look in the parent directory's FileHashDatabase subdirectory
-        $RepositoryRoot = Split-Path $PSScriptRoot -Parent
-        $ModuleDirectory = Join-Path $RepositoryRoot "FileHashDatabase"
+        # Fallback for local testing - look in the grandparent directory's src subdirectory
+        $TestsRoot = Split-Path $PSScriptRoot -Parent
+        $RepositoryRoot = Split-Path $TestsRoot -Parent
+        $ModuleDirectory = Join-Path $RepositoryRoot "src"
         $ModuleManifest = Get-ChildItem -Path $ModuleDirectory -Filter "*.psd1" -Recurse | Select-Object -First 1
         if ($ModuleManifest) {
             $ModulePath = $ModuleManifest.FullName
@@ -54,12 +55,6 @@ Describe "Basic Environment Tests" {
 }
 
 Describe "Module Discovery Tests" {
-    BeforeAll {
-        # Look in the correct location for module files
-        $RepositoryRoot = Split-Path $PSScriptRoot -Parent
-        $ModuleDirectory = Join-Path $RepositoryRoot "FileHashDatabase"
-    }
-
     It "Should find at least one PowerShell file in the module directory" {
         $PSFiles = Get-ChildItem -Path $ModuleDirectory -Filter "*.ps1" -Recurse -ErrorAction SilentlyContinue
         $PSFiles.Count | Should -BeGreaterThan 0
@@ -76,17 +71,6 @@ Describe "Module Discovery Tests" {
 }
 
 Describe "Module Import Tests" {
-    BeforeAll {
-        # Use the same logic as the main BeforeAll block
-        if ($env:TEST_MODULE_PATH) {
-            $ModuleManifest = Get-Item $env:TEST_MODULE_PATH
-        } else {
-            $RepositoryRoot = Split-Path $PSScriptRoot -Parent
-            $ModuleDirectory = Join-Path $RepositoryRoot "FileHashDatabase"
-            $ModuleManifest = Get-ChildItem -Path $ModuleDirectory -Filter "*.psd1" -Recurse -ErrorAction SilentlyContinue | Select-Object -First 1
-        }
-    }
-
     It "Should have a valid module manifest" {
         $ModuleManifest | Should -Not -BeNullOrEmpty
         if ($ModuleManifest) {

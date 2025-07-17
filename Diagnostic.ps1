@@ -14,7 +14,7 @@ Write-Host "Current Location: $(Get-Location)"
 Write-Host "`nPath Information:" -ForegroundColor Yellow
 $repoRoot = Get-Location
 $buildPath = Join-Path $repoRoot "Build"
-$modulePath = Join-Path $repoRoot "FileHashDatabase"
+$modulePath = Join-Path $repoRoot "src"
 $manifestPath = Join-Path $modulePath "FileHashDatabase.psd1"
 $psm1Path = Join-Path $modulePath "FileHashDatabase.psm1"
 

@@ -33,7 +33,7 @@ jobs:
         key: ${{ runner.os }}-powershell-${{ matrix.powershell-version }}-${{ hashFiles('src/FileHashDatabase.psd1') }}
 
     - name: Install required modules
-      shell: ${{ matrix.shell || 'pwsh' }}
+      shell: ${{ (matrix.os == 'windows-latest' && matrix.powershell-version == '5.1') && 'powershell' || 'pwsh' }}
       run: |
         Set-PSRepository PSGallery -InstallationPolicy Trusted
         Install-Module -Name Pester -RequiredVersion 5.6.0 -Force -Scope CurrentUser
@@ -41,7 +41,7 @@ jobs:
         Install-Module -Name PSSQLite -Force -Scope CurrentUser
 
     - name: Run PSScriptAnalyzer
-      shell: ${{ matrix.shell || 'pwsh' }}
+      shell: ${{ (matrix.os == 'windows-latest' && matrix.powershell-version == '5.1') && 'powershell' || 'pwsh' }}
       run: |
         $results = Invoke-ScriptAnalyzer -Path ./src -Recurse -Settings PSGallery
         $results | Export-Clixml -Path "analyzer-results-${{ matrix.os }}-ps${{ matrix.powershell-version }}.xml"
@@ -53,12 +53,12 @@ jobs:
         }
 
     - name: Import module for testing
-      shell: ${{ matrix.shell || 'pwsh' }}
+      shell: ${{ (matrix.os == 'windows-latest' && matrix.powershell-version == '5.1') && 'powershell' || 'pwsh' }}
       run: |
         Import-Module ./src/FileHashDatabase.psd1 -Force
 
     - name: Run Pester Tests
-      shell: ${{ matrix.shell || 'pwsh' }}
+      shell: ${{ (matrix.os == 'windows-latest' && matrix.powershell-version == '5.1') && 'powershell' || 'pwsh' }}
       run: |
         $config = New-PesterConfiguration
         $config.Run.Path = "./Tests"

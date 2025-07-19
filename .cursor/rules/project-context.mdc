@@ -1,0 +1,28 @@
+---
+description: Project context and repository information for FileHashDatabase
+globs:
+alwaysApply: true
+---
+
+# Project Context
+
+## Git Repository Information
+- Repository: FileHashDatabase
+- Local location: /c%3A/Users/warwi/Code/FileHashDatabase
+- GitHub URL: https://github.com/warwickallen/FileHashDatabase
+- Type: PowerShell module for file hash management
+- Scope: Windows operating systems only
+- PowerShell Version: 5.1+
+
+## Project Structure
+- Main module: src/FileHashDatabase.psm1
+- Public functions: src/Public/
+- Private functions: src/Private/
+- Tests: Tests/ (Unit and Integration)
+- Build scripts: Build/
+
+## Development Guidelines
+- Follow PowerShell best practices
+- Maintain Windows compatibility
+- Include comprehensive tests
+- Use British English in documentation and comments

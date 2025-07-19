@@ -5,25 +5,27 @@ on:
   pull_request:
     branches: [main, develop]
     paths-ignore:
-      - 'docs/**'
       - '**.md'
+      - '.cursor'
       - '.git'
       - '.gitattributes'
       - '.gitignore'
+      - 'Diagnostic.ps1'
+      - 'docs/**'
       - 'LICENSE'
       - 'README.md'
-      - 'Diagnostic.ps1'
   push:
     branches: [main]  # Only run comprehensive tests on main for releases
     paths-ignore:
-      - 'docs/**'
       - '**.md'
+      - '.cursor'
       - '.git'
       - '.gitattributes'
       - '.gitignore'
+      - 'Diagnostic.ps1'
+      - 'docs/**'
       - 'LICENSE'
       - 'README.md'
-      - 'Diagnostic.ps1'
   workflow_dispatch:  # Manual trigger for expensive operations
     inputs:
       run_full_tests:

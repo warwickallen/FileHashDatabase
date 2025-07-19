@@ -68,7 +68,7 @@ jobs:
         shell: pwsh
         run: |
           Write-Host "=== Running PSScriptAnalyzer ===" -ForegroundColor Cyan
-          $analysisResults = Invoke-ScriptAnalyzer -Path ./src -Recurse -Settings PSGallery
+          $analysisResults = Invoke-ScriptAnalyzer -Path ./src -Recurse -Settings ./PSScriptAnalyzerSettings.psd1
           if ($analysisResults) {
             $analysisResults | Export-Clixml -Path "analyzer-results.xml"
             $analysisResults | Out-String | Write-Host
@@ -133,7 +133,7 @@ jobs:
 
       - name: Setup PowerShell 7.4
         if: matrix.powershell-version == '7.4'
-        uses: microsoft/setup-powershell@v1
+        uses: actions/setup-powershell@v1
         with:
           powershell-version: '7.4'
 

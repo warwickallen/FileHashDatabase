@@ -1,178 +1,235 @@
 name: PowerShell Module CI
+
+# Cost-optimised triggers - focus on PR validation rather than every push
 on:
-  push:
-    branches: [ main, develop ]
   pull_request:
-    branches: [ main, develop ]
+    branches: [main, develop]
+    paths-ignore:
+      - '**.md'
+      - '.cursor'
+      - '.git'
+      - '.gitattributes'
+      - '.gitignore'
+      - 'Diagnostic.ps1'
+      - 'docs/**'
+      - 'LICENSE'
+      - 'README.md'
+  push:
+    branches: [main]  # Only run comprehensive tests on main for releases
+    paths-ignore:
+      - '**.md'
+      - '.cursor'
+      - '.git'
+      - '.gitattributes'
+      - '.gitignore'
+      - 'Diagnostic.ps1'
+      - 'docs/**'
+      - 'LICENSE'
+      - 'README.md'
+  workflow_dispatch:  # Manual trigger for expensive operations
+    inputs:
+      run_full_tests:
+        description: 'Run full test suite including integration tests'
+        type: boolean
+        default: false
+
+env:
+  POWERSHELL_TELEMETRY_OPTOUT: 1
 
 jobs:
-  test-windows-ps51:
-    name: Windows PowerShell 5.1
+  # Fast feedback loop - grouped to avoid minute rounding penalties
+  quick-validation:
+    name: Quick Validation
     runs-on: windows-latest
-    
+    timeout-minutes: 10
     steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
+      - name: Checkout
+        uses: actions/checkout@v4
 
-    - name: Cache PowerShell modules
-      uses: actions/cache@v4
-      with:
-        path: |
-          ~/Documents/PowerShell/Modules
-          C:\Users\runneradmin\Documents\PowerShell\Modules
-        key: windows-powershell-5.1-${{ hashFiles('src/FileHashDatabase.psd1') }}
+      - name: Cache PowerShell modules
+        uses: actions/cache@v4
+        with:
+          path: |
+            C:\Users\runneradmin\Documents\PowerShell\Modules
+            C:\Users\runneradmin\Documents\WindowsPowerShell\Modules
+          key: ${{ runner.os }}-PSModules-${{ hashFiles('src/*.psd1', 'src/*.psm1') }}
+          restore-keys: |
+            ${{ runner.os }}-PSModules-
 
-    - name: Install required modules
-      shell: powershell
-      run: |
-        Set-PSRepository PSGallery -InstallationPolicy Trusted
-        Install-Module -Name Pester -RequiredVersion 5.6.0 -Force -Scope CurrentUser
-        Install-Module -Name PSScriptAnalyzer -Force -Scope CurrentUser
-        Install-Module -Name PSSQLite -Force -Scope CurrentUser
+      - name: Install Required Modules
+        shell: pwsh
+        run: |
+          Set-PSRepository PSGallery -InstallationPolicy Trusted
+          Install-Module -Name Pester -RequiredVersion 5.6.0 -Force -Scope CurrentUser
+          Install-Module -Name PSScriptAnalyzer -Force -Scope CurrentUser
+          Install-Module -Name PSSQLite -Force -Scope CurrentUser
 
-    - name: Run PSScriptAnalyzer
-      shell: powershell
-      run: |
-        $results = Invoke-ScriptAnalyzer -Path ./src -Recurse -Settings PSGallery
-        $results | Export-Clixml -Path "analyzer-results-windows-ps51.xml"
-        if ($results) {
-          $results | Out-String | Write-Host
-          Write-Warning "PSScriptAnalyzer found $($results.Count) issues"
-        } else {
-          Write-Host "PSScriptAnalyzer found no issues"
-        }
+      - name: PSScriptAnalyzer + Module Compilation + Basic Tests
+        shell: pwsh
+        run: |
+          Write-Host "=== Running PSScriptAnalyzer ===" -ForegroundColor Cyan
+          $analysisResults = Invoke-ScriptAnalyzer -Path ./src -Recurse -Settings ./PSScriptAnalyzerSettings.psd1
+          if ($analysisResults) {
+            $analysisResults | Export-Clixml -Path "analyzer-results.xml"
+            $analysisResults | Out-String | Write-Host
+            Write-Host "PSScriptAnalyzer found issues (see above)" -ForegroundColor Yellow
+            # Don't fail the build for warnings, only for errors
+            $errors = $analysisResults | Where-Object { $_.Severity -eq 'Error' }
+            if ($errors) {
+              Write-Error "PSScriptAnalyzer found errors"
+              exit 1
+            }
+          } else {
+            Write-Host "PSScriptAnalyzer found no issues" -ForegroundColor Green
+          }
 
-    - name: Import module for testing
-      shell: powershell
-      run: |
-        Import-Module ./src/FileHashDatabase.psd1 -Force
+          Write-Host "=== Testing Module Compilation ===" -ForegroundColor Cyan
+          try {
+            Import-Module ./src/FileHashDatabase.psd1 -Force
+            Get-Command -Module FileHashDatabase
+            Write-Host "Module compiled successfully" -ForegroundColor Green
+          }
+          catch {
+            Write-Error "Module compilation failed: $_"
+            exit 1
+          }
 
-    - name: Run Pester Tests
-      shell: powershell
-      run: |
-        $config = New-PesterConfiguration
-        $config.Run.Path = "./Tests"
-        $config.CodeCoverage.Enabled = $true
-        $config.CodeCoverage.Path = "./src"
-        $config.CodeCoverage.OutputPath = "./coverage.xml"
-        $config.CodeCoverage.OutputFormat = "JaCoCo"
-        $config.CodeCoverage.CoveragePercentTarget = 70
-        $config.TestResult.Enabled = $true
-        $config.TestResult.OutputPath = "./test-results.xml"
-        $config.TestResult.OutputFormat = "NUnitXml"
-        $config.Output.Verbosity = "Detailed"
+          Write-Host "=== Running Unit Tests ===" -ForegroundColor Cyan
+          $config = New-PesterConfiguration
+          $config.Run.Path = "./Tests/Unit"
+          $config.TestResult.Enabled = $true
+          $config.TestResult.OutputPath = "./unit-test-results.xml"
+          $config.TestResult.OutputFormat = "NUnitXml"
+          $config.Output.Verbosity = "Detailed"
 
-        $result = Invoke-Pester -Configuration $config
+          $result = Invoke-Pester -Configuration $config
+          if ($result.FailedCount -gt 0) {
+            Write-Error "Unit tests failed: $($result.FailedCount)"
+            exit 1
+          }
 
-        Write-Host "Code Coverage: $($result.CodeCoverage.CoveragePercent)%"
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: quick-validation-results
+          path: |
+            analyzer-results.xml
+            unit-test-results.xml
+          retention-days: 7
 
-        if ($result.FailedCount -gt 0) {
-          Write-Error "Tests failed: $($result.FailedCount) out of $($result.TotalCount)"
-          exit 1
-        }
-
-    - name: Upload test artifacts
-      uses: actions/upload-artifact@v4
-      if: always()
-      with:
-        name: test-results-windows-ps51
-        path: |
-          coverage.xml
-          test-results.xml
-          analyzer-results-windows-ps51.xml
-        retention-days: 30
-
-    - name: Upload coverage to Codecov
-      uses: codecov/codecov-action@v4
-      with:
-        token: ${{ secrets.CODECOV_TOKEN }}
-        file: ./coverage.xml
-        flags: unittests
-        name: FileHashDatabase-coverage-ps51
-        fail_ci_if_error: false
-
-  test-windows-ps74:
-    name: Windows PowerShell 7.4
+  # Comprehensive testing - only runs when needed
+  comprehensive-tests:
+    name: Comprehensive Tests (PS ${{ matrix.powershell-version }})
+    if: github.event_name == 'push' || github.event.inputs.run_full_tests == 'true' || contains(github.event.pull_request.labels.*.name, 'full-tests')
+    needs: quick-validation
     runs-on: windows-latest
-    
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - powershell-version: '5.1'
+            shell: powershell
+          - powershell-version: '7.4'
+            shell: pwsh
+
     steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
+      - name: Checkout
+        uses: actions/checkout@v4
 
-    - name: Cache PowerShell modules
-      uses: actions/cache@v4
-      with:
-        path: |
-          ~/.local/share/powershell/Modules
-          ~/Documents/PowerShell/Modules
-          C:\Users\runneradmin\Documents\PowerShell\Modules
-        key: windows-powershell-7.4-${{ hashFiles('src/FileHashDatabase.psd1') }}
+      - name: Setup PowerShell 7.4
+        if: matrix.powershell-version == '7.4'
+        uses: actions/setup-powershell@v1
+        with:
+          powershell-version: '7.4'
 
-    - name: Install required modules
-      shell: pwsh
-      run: |
-        Set-PSRepository PSGallery -InstallationPolicy Trusted
-        Install-Module -Name Pester -RequiredVersion 5.6.0 -Force -Scope CurrentUser
-        Install-Module -Name PSScriptAnalyzer -Force -Scope CurrentUser
-        Install-Module -Name PSSQLite -Force -Scope CurrentUser
+      - name: Cache PowerShell modules
+        uses: actions/cache@v4
+        with:
+          path: |
+            C:\Users\runneradmin\Documents\PowerShell\Modules
+            C:\Users\runneradmin\Documents\WindowsPowerShell\Modules
+          key: ${{ runner.os }}-PS${{ matrix.powershell-version }}-${{ hashFiles('src/*.psd1', 'src/*.psm1') }}
 
-    - name: Run PSScriptAnalyzer
-      shell: pwsh
-      run: |
-        $results = Invoke-ScriptAnalyzer -Path ./src -Recurse -Settings PSGallery
-        $results | Export-Clixml -Path "analyzer-results-windows-ps74.xml"
-        if ($results) {
-          $results | Out-String | Write-Host
-          Write-Warning "PSScriptAnalyzer found $($results.Count) issues"
-        } else {
-          Write-Host "PSScriptAnalyzer found no issues"
-        }
+      - name: Install modules (PowerShell 5.1)
+        if: matrix.powershell-version == '5.1'
+        shell: powershell
+        run: |
+          Set-PSRepository PSGallery -InstallationPolicy Trusted
+          Install-Module -Name Pester -RequiredVersion 5.6.0 -Force -Scope CurrentUser
+          Install-Module -Name PSSQLite -Force -Scope CurrentUser
 
-    - name: Import module for testing
-      shell: pwsh
-      run: |
-        Import-Module ./src/FileHashDatabase.psd1 -Force
+      - name: Install modules (PowerShell 7.4)
+        if: matrix.powershell-version == '7.4'
+        shell: pwsh
+        run: |
+          Set-PSRepository PSGallery -InstallationPolicy Trusted
+          Install-Module -Name Pester -RequiredVersion 5.6.0 -Force -Scope CurrentUser
+          Install-Module -Name PSSQLite -Force -Scope CurrentUser
 
-    - name: Run Pester Tests
-      shell: pwsh
-      run: |
-        $config = New-PesterConfiguration
-        $config.Run.Path = "./Tests"
-        $config.CodeCoverage.Enabled = $true
-        $config.CodeCoverage.Path = "./src"
-        $config.CodeCoverage.OutputPath = "./coverage.xml"
-        $config.CodeCoverage.OutputFormat = "JaCoCo"
-        $config.CodeCoverage.CoveragePercentTarget = 70
-        $config.TestResult.Enabled = $true
-        $config.TestResult.OutputPath = "./test-results.xml"
-        $config.TestResult.OutputFormat = "NUnitXml"
-        $config.Output.Verbosity = "Detailed"
+      - name: Run comprehensive tests with coverage (PowerShell 5.1)
+        if: matrix.powershell-version == '5.1'
+        shell: powershell
+        run: |
+          $config = New-PesterConfiguration
+          $config.Run.Path = "./Tests"
+          $config.CodeCoverage.Enabled = $true
+          $config.CodeCoverage.Path = "./src"
+          $config.CodeCoverage.OutputPath = "./coverage-ps${{ matrix.powershell-version }}.xml"
+          $config.CodeCoverage.OutputFormat = "JaCoCo"
+          $config.CodeCoverage.CoveragePercentTarget = 70
+          $config.TestResult.Enabled = $true
+          $config.TestResult.OutputPath = "./test-results-ps${{ matrix.powershell-version }}.xml"
+          $config.TestResult.OutputFormat = "NUnitXml"
+          $config.Output.Verbosity = "Detailed"
 
-        $result = Invoke-Pester -Configuration $config
+          $result = Invoke-Pester -Configuration $config
 
-        Write-Host "Code Coverage: $($result.CodeCoverage.CoveragePercent)%"
+          if ($result.FailedCount -gt 0) {
+            Write-Error "Tests failed: $($result.FailedCount)"
+            exit 1
+          }
 
-        if ($result.FailedCount -gt 0) {
-          Write-Error "Tests failed: $($result.FailedCount) out of $($result.TotalCount)"
-          exit 1
-        }
+      - name: Run comprehensive tests with coverage (PowerShell 7.4)
+        if: matrix.powershell-version == '7.4'
+        shell: pwsh
+        run: |
+          $config = New-PesterConfiguration
+          $config.Run.Path = "./Tests"
+          $config.CodeCoverage.Enabled = $true
+          $config.CodeCoverage.Path = "./src"
+          $config.CodeCoverage.OutputPath = "./coverage-ps${{ matrix.powershell-version }}.xml"
+          $config.CodeCoverage.OutputFormat = "JaCoCo"
+          $config.CodeCoverage.CoveragePercentTarget = 70
+          $config.TestResult.Enabled = $true
+          $config.TestResult.OutputPath = "./test-results-ps${{ matrix.powershell-version }}.xml"
+          $config.TestResult.OutputFormat = "NUnitXml"
+          $config.Output.Verbosity = "Detailed"
 
-    - name: Upload test artifacts
-      uses: actions/upload-artifact@v4
-      if: always()
-      with:
-        name: test-results-windows-ps74
-        path: |
-          coverage.xml
-          test-results.xml
-          analyzer-results-windows-ps74.xml
-        retention-days: 30
+          $result = Invoke-Pester -Configuration $config
 
-    - name: Upload coverage to Codecov
-      uses: codecov/codecov-action@v4
-      with:
-        token: ${{ secrets.CODECOV_TOKEN }}
-        file: ./coverage.xml
-        flags: unittests
-        name: FileHashDatabase-coverage-ps74
-        fail_ci_if_error: false
+          if ($result.FailedCount -gt 0) {
+            Write-Error "Tests failed: $($result.FailedCount)"
+            exit 1
+          }
+
+      - name: Upload test artifacts
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: test-results-ps${{ matrix.powershell-version }}
+          path: |
+            coverage-ps${{ matrix.powershell-version }}.xml
+            test-results-ps${{ matrix.powershell-version }}.xml
+          retention-days: 30
+
+      - name: Upload to Codecov
+        uses: codecov/codecov-action@v4
+        with:
+          # CODECOV_TOKEN is a standard GitHub secret for Codecov authentication
+          token: ${{ secrets.CODECOV_TOKEN }}
+          file: ./coverage-ps${{ matrix.powershell-version }}.xml
+          flags: powershell-${{ matrix.powershell-version }}
+          name: codecov-ps${{ matrix.powershell-version }}
+          fail_ci_if_error: false

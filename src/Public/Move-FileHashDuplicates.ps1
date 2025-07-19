@@ -105,7 +105,7 @@
     queries.
 #>
 
-function Parameterize-Filters {
+function Convert-FilterToParameter {
     param(
         [string[]]$Filters,
         [string]$Scope
@@ -164,11 +164,11 @@ function Get-DestinationPath {
     if (-not (Test-Path $destDirPath)) {
         New-Item -Path $destDirPath -ItemType Directory -Force | Out-Null
     }
-    $fileName = [System.IO.Path]::GetFileNameWithoutExtension($destPath)
+    $baseFileName = [System.IO.Path]::GetFileNameWithoutExtension($destPath)
     $extension = [System.IO.Path]::GetExtension($destPath)
     $counter = 1
     while (Test-Path $destPath) {
-        $newFileName = "$fileName_$counter$extension"
+        $newFileName = "$baseFileName`_$counter$extension"
         $destPath = Join-Path $destDirPath $newFileName
         "Resolved conflict by renaming to '$newFileName'" | Write-Verbose
         $counter++
@@ -176,7 +176,7 @@ function Get-DestinationPath {
     return $destPath
 }
 
-function Move-FileHashDuplicates {
+function Move-FileHashDuplicate {
     [CmdletBinding(SupportsShouldProcess)]
     param(
         [Parameter(Mandatory, ValueFromPipeline)]
@@ -218,91 +218,77 @@ function Move-FileHashDuplicates {
     )
 
     if ($Help) {
-        Get-Help -Name Move-FileHashDuplicates
+        Get-Help -Name Move-FileHashDuplicate
         return
     }
 
-    # Validate and resolve Destination
-    try {
-        $Destination = [System.IO.Path]::GetFullPath($Destination)
-        "Resolved destination path: $Destination" | Write-Verbose
-        if ((Test-Path $Destination) -and -not (Test-Path $Destination -PathType Container)) {
-            throw "The destination path '$Destination' exists but is not a directory."
+    begin {
+        # Initialise database
+        try {
+            $db = [FileHashDatabase]::new($DatabasePath)
+        } catch {
+            throw "Failed to initialise database at '$DatabasePath': $_"
         }
-        if (-not (Test-Path $Destination)) {
-            New-Item -Path $Destination -ItemType Directory -Force | Out-Null
-            "Created destination directory: $Destination" | Write-Verbose
-        }
-    } catch {
-        throw "Failed to create destination directory '$Destination': $_"
-    }
 
-    # Initialise database
-    try {
-        $db = [FileHashDatabase]::new($DatabasePath)
-    } catch {
-        throw "Failed to initialise database at '$DatabasePath': $_"
-    }
-
-    # Process Filter parameter
-    if ($null -eq $Filter) {
-        $filters = @{}
-    } elseif ($Filter -is [array]) {
-        $filters = @{ aggregated = $Filter }
-    } elseif ($Filter -is [hashtable]) {
-        $filters = $Filter
-        $validKeys = 'individual', 'aggregated'
-        foreach ($key in $filters.Keys) {
-            if ($key -notin $validKeys) {
-                throw "Invalid filter key: $key. Allowed keys are 'individual' and 'aggregated'."
+        # Process Filter parameter
+        if ($null -eq $Filter) {
+            $filters = @{}
+        } elseif ($Filter -is [array]) {
+            $filters = @{ aggregated = $Filter }
+        } elseif ($Filter -is [hashtable]) {
+            $filters = $Filter
+            $validKeys = 'individual', 'aggregated'
+            foreach ($key in $filters.Keys) {
+                if ($key -notin $validKeys) {
+                    throw "Invalid filter key: $key. Allowed keys are 'individual' and 'aggregated'."
+                }
             }
+        } else {
+            throw "Filter must be an array or a hashtable."
         }
-    } else {
-        throw "Filter must be an array or a hashtable."
-    }
 
-    $individualFilters = if ($filters.ContainsKey('individual'))
-                              { $filters['individual'] }
-                         else { @() }
-    $aggregatedFilters = if ($filters.ContainsKey('aggregated'))
-                             { $filters['aggregated'] }
-                         else { @() }
+        $individualFilters = if ($filters.ContainsKey('individual'))
+                                  { $filters['individual'] }
+                             else { @() }
+        $aggregatedFilters = if ($filters.ContainsKey('aggregated'))
+                                 { $filters['aggregated'] }
+                             else { @() }
 
-    # Parameterize filters
-    $individualConditions, $individualParams = Parameterize-Filters `
-                                                   -Filters $individualFilters `
-                                                   -Scope 'individual'
-    $aggregatedConditions, $aggregatedParams = Parameterize-Filters `
-                                                   -Filters $aggregatedFilters `
-                                                   -Scope 'aggregated'
+        # Convert filters to parameters
+        $individualConditions, $individualParams = Convert-FilterToParameter `
+                                                       -Filters $individualFilters `
+                                                       -Scope 'individual'
+        $aggregatedConditions, $aggregatedParams = Convert-FilterToParameter `
+                                                       -Filters $aggregatedFilters `
+                                                       -Scope 'aggregated'
 
-    # Construct query
-    $fileCount = if ($Reprocess) { 'COUNT(DISTINCT fh.FilePath)' } else { 'COUNT(*)' }
+        # Construct query
+        $fileCount = if ($Reprocess) { 'COUNT(DISTINCT fh.FilePath)' } else { 'COUNT(*)' }
 
-    $leftJoinClause = ''
-    $leftJoinClause += if (-not $Reprocess) {
-        "LEFT JOIN MovedFile mf ON fh.FilePath = mf.SourcePath AND mf.Hash IS NOT NULL"
-    }
+        $leftJoinClause = ''
+        $leftJoinClause += if (-not $Reprocess) {
+            "LEFT JOIN MovedFile mf ON fh.FilePath = mf.SourcePath AND mf.Hash IS NOT NULL"
+        }
 
-    $whereClause = "WHERE a.AlgorithmName = @algorithm"
-    if ($individualConditions) {
-        $whereClause += " AND " + ($individualConditions -join " AND ")
-    }
+        $whereClause = "WHERE a.AlgorithmName = @algorithm"
+        if ($individualConditions) {
+            $whereClause += " AND " + ($individualConditions -join " AND ")
+        }
 
-    $havingClause = "HAVING COUNT(*) > 1"
-    if ($aggregatedConditions) {
-        $havingClause += " AND " + ($aggregatedConditions -join " AND ")
-    }
+        $havingClause = "HAVING COUNT(*) > 1"
+        if ($aggregatedConditions) {
+            $havingClause += " AND " + ($aggregatedConditions -join " AND ")
+        }
 
-    $orderByClause = "ORDER BY "
-    $orderByClause += switch ($OrderBy) {
-        'FilePaths' { 'GROUP_CONCAT(fh.FilePath)' }
-        'MaxProcessedAt'  { 'MAX(fh.ProcessedAt)' }
-        'MinProcessedAt'  { 'MIN(fh.ProcessedAt)' }
-    }
-    $orderByClause += if ($OrderDirection -match '^(Asc|a)') { ' ASC' } else { ' DESC' }
+        $orderByClause = "ORDER BY "
+        $orderByClause += switch ($OrderBy) {
+            'FilePaths' { 'GROUP_CONCAT(fh.FilePath)' }
+            'MaxProcessedAt'  { 'MAX(fh.ProcessedAt)' }
+            'MinProcessedAt'  { 'MIN(fh.ProcessedAt)' }
+        }
+        $orderByClause += if ($OrderDirection -match '^(Asc|a)') { ' ASC' } else { ' DESC' }
 
-    $query = @"
+        $query = @"
 SELECT
   fh.Hash
 , a.AlgorithmName     AS Algorithm
@@ -319,26 +305,43 @@ $havingClause
 $orderByClause
 "@
 
-    $queryParams = @{ algorithm = $Algorithm } + $individualParams + $aggregatedParams
-    try {
-        $groups = $db.InvokeQuery($query, $queryParams)
-        if (-not $groups) {
-            Write-Verbose "No duplicate files found for algorithm '$Algorithm'."
+        $queryParams = @{ algorithm = $Algorithm } + $individualParams + $aggregatedParams
+        try {
+            $groups = $db.InvokeQuery($query, $queryParams)
+            if (-not $groups) {
+                Write-Verbose "No duplicate files found for algorithm '$Algorithm'."
+            }
+        } catch {
+            throw "Failed to retrieve duplicate groups: $_"
         }
-    } catch {
-        throw "Failed to retrieve duplicate groups: $_"
+
+        $processedFiles = 0
+        $errorAction = if ($HaltOnFailure) { 'Stop' } else { 'Continue' }
+        $ndots = 64
+        $dots = '.' * $ndots
+        $interdotPauseMs = [math]::Round(1000 * $InterfilePauseSeconds / $ndots, 0)
     }
 
-    $processedFiles = 0
-    $errorAction = if ($HaltOnFailure) { 'Stop' } else { 'Continue' }
-    $ndots = 64
-    $dots = '.' * $ndots
-    $interdotPauseMs = [math]::Round(1000 * $InterfilePauseSeconds / $ndots, 0)
+    process {
+        # Validate and resolve Destination
+        try {
+            $Destination = [System.IO.Path]::GetFullPath($Destination)
+            "Resolved destination path: $Destination" | Write-Verbose
+            if ((Test-Path $Destination) -and -not (Test-Path $Destination -PathType Container)) {
+                throw "The destination path '$Destination' exists but is not a directory."
+            }
+            if (-not (Test-Path $Destination)) {
+                New-Item -Path $Destination -ItemType Directory -Force | Out-Null
+                "Created destination directory: $Destination" | Write-Verbose
+            }
+        } catch {
+            throw "Failed to create destination directory '$Destination': $_"
+        }
 
-    foreach ($group in $groups) {
-        if ($processedFiles -ge $MaxFiles) { break }
+        foreach ($group in $groups) {
+            if ($processedFiles -ge $MaxFiles) { break }
 
-        $filesQueryTemplate = @"
+            $filesQueryTemplate = @"
 SELECT
   fh.FilePath
 , fh.ProcessedAt
@@ -350,84 +353,85 @@ $whereClause
 AND fh.Hash = @hash
 $(if (-not $Reprocess) { " AND mf.SourcePath IS NULL" })
 "@
-        $fileParams = @{ hash = $group.Hash; algorithm = $Algorithm } + $individualParams
-        try {
-            $files = $db.InvokeQuery($filesQueryTemplate, $fileParams) | ForEach-Object {
-                [PSCustomObject]@{
-                    FilePath    = $_.FilePath
-                    ProcessedAt = $_.ProcessedAt
-                    PathLength  = $_.FilePath.Length
-                    NameLength  = ([System.IO.Path]::GetFileName($_.FilePath)).Length
+            $fileParams = @{ hash = $group.Hash; algorithm = $Algorithm } + $individualParams
+            try {
+                $files = $db.InvokeQuery($filesQueryTemplate, $fileParams) | ForEach-Object {
+                    [PSCustomObject]@{
+                        FilePath    = $_.FilePath
+                        ProcessedAt = $_.ProcessedAt
+                        PathLength  = $_.FilePath.Length
+                        NameLength  = ([System.IO.Path]::GetFileName($_.FilePath)).Length
+                    }
                 }
-            }
-        } catch {
-            Write-Error "Failed to retrieve files for hash '$($group.Hash)': $_" -ErrorAction $errorAction
-            continue
-        }
-
-        if ($files.Count -le 1) { continue }
-
-        $preserveFile = switch ($PreserveBy) {
-            'EarliestProcessed' { $files | Sort-Object ProcessedAt | Select-Object -First 1 }
-            'LongestPath'       { $files | Sort-Object PathLength -Descending | Select-Object -First 1 }
-            'ShortestPath'      { $files | Sort-Object PathLength | Select-Object -First 1 }
-            'LongestName'       { $files | Sort-Object NameLength -Descending | Select-Object -First 1 }
-        }
-        "Preserving file: $($preserveFile.FilePath)" | Write-Verbose
-
-        $toMove = $files | Where-Object { $_.FilePath -ne $preserveFile.FilePath }
-
-        foreach ($file in $toMove) {
-            if ($processedFiles -ge $MaxFiles) { break }
-            if (-not (Test-Path $file.FilePath)) {
-                "File not found: $($file.FilePath)" | Write-Warning
+            } catch {
+                Write-Error "Failed to retrieve files for hash '$($group.Hash)': $_" -ErrorAction $errorAction
                 continue
             }
 
-            $moveOrCopy      = if ($CopyMode) { 'Copy'    } else { 'Move'   }
-            $movedOrCopied   = if ($CopyMode) { 'Copied'  } else { 'Moved'  }
-            $movingOrCopying = if ($CopyMode) { 'Copying' } else { 'Moving' }
+            if ($files.Count -le 1) { continue }
 
-            $destPath = Get-DestinationPath -SourcePath $file.FilePath -DestinationRoot $Destination
-            "$movingOrCopying '$($file.FilePath)' to '$destPath'" | Write-Verbose
-
-            $fileName = [System.IO.Path]::GetFileName($file.FilePath)
-            $displayName = if ($fileName.Length -gt 64) {
-                $fileName.Substring(0, 61) + "..."
-            } else {
-                $fileName.PadRight(64)
+            $preserveFile = switch ($PreserveBy) {
+                'EarliestProcessed' { $files | Sort-Object ProcessedAt | Select-Object -First 1 }
+                'LongestPath'       { $files | Sort-Object PathLength -Descending | Select-Object -First 1 }
+                'ShortestPath'      { $files | Sort-Object PathLength | Select-Object -First 1 }
+                'LongestName'       { $files | Sort-Object NameLength -Descending | Select-Object -First 1 }
             }
-            $timestamp = (Get-Date).ToString('yyyyMMdd-HHmmss')
-            Write-Host -NoNewline "$timestamp $displayName $dots"
+            "Preserving file: $($preserveFile.FilePath)" | Write-Verbose
 
-            try {
-                if ($PSCmdlet.ShouldProcess($file.FilePath, "$moveOrCopy to $destPath")) {
-                    $params = @{
-                        Path        = $file.FilePath
-                        Destination = $destPath
-                        Force       = $true
-                        ErrorAction = 'Stop'
-                    }
-                    if ($CopyMode) {
-                        Copy-Item @params
-                    } else {
-                        Move-Item @params
-                    }
-                    $db.LogMovedFile($group.Hash, $Algorithm, $file.FilePath, $destPath, (Get-Date))
-                    for ($i = $ndots; $i -gt 0; $i--) {
-                        Start-Sleep -Milliseconds $interdotPauseMs
-                        Write-Host -NoNewline "`b `b"
-                    }
-                    Write-Host "[$movedOrCopied to $destPath]"
+            $toMove = $files | Where-Object { $_.FilePath -ne $preserveFile.FilePath }
+
+            foreach ($file in $toMove) {
+                if ($processedFiles -ge $MaxFiles) { break }
+                if (-not (Test-Path $file.FilePath)) {
+                    "File not found: $($file.FilePath)" | Write-Warning
+                    continue
                 }
-            } catch {
-                "Failed to $($moveOrCopy.ToLower()) '$($file.FilePath)' to '$destPath': $_" |
-                    Write-Error -ErrorAction $errorAction
-                $db.LogMovedFile($group.Hash, $Algorithm, $file.FilePath, $null, (Get-Date))
-                for ($i = $ndots; $i -gt 0; $i--) { Write-Host -NoNewline "`b `b" }
-                Write-Host "[Failed]"
+
+                $moveOrCopy      = if ($CopyMode) { 'Copy'    } else { 'Move'   }
+                $movedOrCopied   = if ($CopyMode) { 'Copied'  } else { 'Moved'  }
+                $movingOrCopying = if ($CopyMode) { 'Copying' } else { 'Moving' }
+
+                $destPath = Get-DestinationPath -SourcePath $file.FilePath -DestinationRoot $Destination
+                "$movingOrCopying '$($file.FilePath)' to '$destPath'" | Write-Verbose
+
+                $fileName = [System.IO.Path]::GetFileName($file.FilePath)
+                $displayName = if ($fileName.Length -gt 64) {
+                    $fileName.Substring(0, 61) + "..."
+                } else {
+                    $fileName.PadRight(64)
+                }
+                $timestamp = (Get-Date).ToString('yyyyMMdd-HHmmss')
+                Write-Host -NoNewline "$timestamp $displayName $dots"
+
+                try {
+                    if ($PSCmdlet.ShouldProcess($file.FilePath, "$moveOrCopy to $destPath")) {
+                        $params = @{
+                            Path        = $file.FilePath
+                            Destination = $destPath
+                            Force       = $true
+                            ErrorAction = 'Stop'
+                        }
+                        if ($CopyMode) {
+                            Copy-Item @params
+                        } else {
+                            Move-Item @params
+                        }
+                        $db.LogMovedFile($group.Hash, $Algorithm, $file.FilePath, $destPath, (Get-Date))
+                        for ($i = $ndots; $i -gt 0; $i--) {
+                            Start-Sleep -Milliseconds $interdotPauseMs
+                            Write-Host -NoNewline "`b `b"
+                        }
+                        Write-Host "[$movedOrCopied to $destPath]"
+                    }
+                } catch {
+                    "Failed to $($moveOrCopy.ToLower()) '$($file.FilePath)' to '$destPath': $_" |
+                        Write-Error -ErrorAction $errorAction
+                    $db.LogMovedFile($group.Hash, $Algorithm, $file.FilePath, $null, (Get-Date))
+                    for ($i = $ndots; $i -gt 0; $i--) { Write-Host -NoNewline "`b `b" }
+                    Write-Host "[Failed]"
+                }
+                $processedFiles++
             }
-            $processedFiles++
         }
     }
 }

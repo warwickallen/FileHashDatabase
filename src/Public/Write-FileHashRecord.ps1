@@ -125,10 +125,10 @@ if (-not (Get-Command -Name 'FileHashDatabase' -ErrorAction SilentlyContinue)) {
     . "$PSScriptRoot\..\Private\FileHashDatabase.ps1"
 }
 
-function Write-FileHashes {
+function Write-FileHashRecord {
     [CmdletBinding()]
     param(
-        [Parameter(ParameterSetName='Normal', Mandatory=$true)]
+        [Parameter(ParameterSetName='Normal')]
         [Parameter(ParameterSetName='Reprocess')]
         [string]$ScanDirectory = (Get-Location).ToString(),
 
@@ -199,7 +199,7 @@ function Write-FileHashes {
     )
 
     if ($Help) {
-        Get-Help -Name Write-FileHashes
+        Get-Help -Name Write-FileHashRecord
         return
     }
 

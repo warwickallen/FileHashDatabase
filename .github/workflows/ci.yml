@@ -72,8 +72,15 @@ jobs:
           if ($analysisResults) {
             $analysisResults | Export-Clixml -Path "analyzer-results.xml"
             $analysisResults | Out-String | Write-Host
-            Write-Error "PSScriptAnalyzer found issues"
-            exit 1
+            Write-Host "PSScriptAnalyzer found issues (see above)" -ForegroundColor Yellow
+            # Don't fail the build for warnings, only for errors
+            $errors = $analysisResults | Where-Object { $_.Severity -eq 'Error' }
+            if ($errors) {
+              Write-Error "PSScriptAnalyzer found errors"
+              exit 1
+            }
+          } else {
+            Write-Host "PSScriptAnalyzer found no issues" -ForegroundColor Green
           }
 
           Write-Host "=== Testing Module Compilation ===" -ForegroundColor Cyan

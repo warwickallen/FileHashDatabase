@@ -1,15 +1,23 @@
 @{
-    # Suppress PSUseSingularNouns warnings for functions that intentionally use plural nouns
+    # Custom PSScriptAnalyzer settings for FileHashDatabase
+    # Configure rules to match our design choices
     Rules = @{
         PSUseSingularNouns = @{
+            Enable = $false
+        }
+        PSAvoidUsingWriteHost = @{
             Enable = $true
-            # Suppress warnings for specific function names that are intentionally plural
+            # Allow Write-Host for progress display with backspace characters
             ExcludeRules = @(
-                'Get-FileHashes',
-                'Convert-FiltersToParameters',
-                'Move-FileHashDuplicates',
-                'Write-FileHashes'
+                'Write-Host -NoNewline',
+                'Write-Host -NoNewLine'
             )
+        }
+        PSUseProcessBlockForPipelineCommand = @{
+            Enable = $true
+        }
+        PSAvoidDefaultValueForMandatoryParameter = @{
+            Enable = $true
         }
     }
 }

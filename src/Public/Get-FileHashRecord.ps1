@@ -76,7 +76,7 @@
     The defaults are set in FileHashDatabase.psm1.
 #>
 
-function Get-FileHashes {
+function Get-FileHashRecord {
     [CmdletBinding()]
     param(
         [string]$DatabasePath,
@@ -90,7 +90,7 @@ function Get-FileHashes {
     )
 
     if ($Help) {
-        Get-Help -Name Get-FileHashes
+        Get-Help -Name Get-FileHashRecord
         return
     }
 

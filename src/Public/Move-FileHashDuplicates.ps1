@@ -105,7 +105,7 @@
     queries.
 #>
 
-function Convert-FiltersToParameters {
+function Convert-FilterToParameter {
     param(
         [string[]]$Filters,
         [string]$Scope
@@ -176,7 +176,7 @@ function Get-DestinationPath {
     return $destPath
 }
 
-function Move-FileHashDuplicates {
+function Move-FileHashDuplicate {
     [CmdletBinding(SupportsShouldProcess)]
     param(
         [Parameter(Mandatory, ValueFromPipeline)]
@@ -218,91 +218,77 @@ function Move-FileHashDuplicates {
     )
 
     if ($Help) {
-        Get-Help -Name Move-FileHashDuplicates
+        Get-Help -Name Move-FileHashDuplicate
         return
     }
 
-    # Validate and resolve Destination
-    try {
-        $Destination = [System.IO.Path]::GetFullPath($Destination)
-        "Resolved destination path: $Destination" | Write-Verbose
-        if ((Test-Path $Destination) -and -not (Test-Path $Destination -PathType Container)) {
-            throw "The destination path '$Destination' exists but is not a directory."
+    begin {
+        # Initialise database
+        try {
+            $db = [FileHashDatabase]::new($DatabasePath)
+        } catch {
+            throw "Failed to initialise database at '$DatabasePath': $_"
         }
-        if (-not (Test-Path $Destination)) {
-            New-Item -Path $Destination -ItemType Directory -Force | Out-Null
-            "Created destination directory: $Destination" | Write-Verbose
-        }
-    } catch {
-        throw "Failed to create destination directory '$Destination': $_"
-    }
 
-    # Initialise database
-    try {
-        $db = [FileHashDatabase]::new($DatabasePath)
-    } catch {
-        throw "Failed to initialise database at '$DatabasePath': $_"
-    }
-
-    # Process Filter parameter
-    if ($null -eq $Filter) {
-        $filters = @{}
-    } elseif ($Filter -is [array]) {
-        $filters = @{ aggregated = $Filter }
-    } elseif ($Filter -is [hashtable]) {
-        $filters = $Filter
-        $validKeys = 'individual', 'aggregated'
-        foreach ($key in $filters.Keys) {
-            if ($key -notin $validKeys) {
-                throw "Invalid filter key: $key. Allowed keys are 'individual' and 'aggregated'."
+        # Process Filter parameter
+        if ($null -eq $Filter) {
+            $filters = @{}
+        } elseif ($Filter -is [array]) {
+            $filters = @{ aggregated = $Filter }
+        } elseif ($Filter -is [hashtable]) {
+            $filters = $Filter
+            $validKeys = 'individual', 'aggregated'
+            foreach ($key in $filters.Keys) {
+                if ($key -notin $validKeys) {
+                    throw "Invalid filter key: $key. Allowed keys are 'individual' and 'aggregated'."
+                }
             }
+        } else {
+            throw "Filter must be an array or a hashtable."
         }
-    } else {
-        throw "Filter must be an array or a hashtable."
-    }
 
-    $individualFilters = if ($filters.ContainsKey('individual'))
-                              { $filters['individual'] }
-                         else { @() }
-    $aggregatedFilters = if ($filters.ContainsKey('aggregated'))
-                             { $filters['aggregated'] }
-                         else { @() }
+        $individualFilters = if ($filters.ContainsKey('individual'))
+                                  { $filters['individual'] }
+                             else { @() }
+        $aggregatedFilters = if ($filters.ContainsKey('aggregated'))
+                                 { $filters['aggregated'] }
+                             else { @() }
 
-    # Convert filters to parameters
-    $individualConditions, $individualParams = Convert-FiltersToParameters `
-                                                   -Filters $individualFilters `
-                                                   -Scope 'individual'
-    $aggregatedConditions, $aggregatedParams = Convert-FiltersToParameters `
-                                                   -Filters $aggregatedFilters `
-                                                   -Scope 'aggregated'
+        # Convert filters to parameters
+        $individualConditions, $individualParams = Convert-FilterToParameter `
+                                                       -Filters $individualFilters `
+                                                       -Scope 'individual'
+        $aggregatedConditions, $aggregatedParams = Convert-FilterToParameter `
+                                                       -Filters $aggregatedFilters `
+                                                       -Scope 'aggregated'
 
-    # Construct query
-    $fileCount = if ($Reprocess) { 'COUNT(DISTINCT fh.FilePath)' } else { 'COUNT(*)' }
+        # Construct query
+        $fileCount = if ($Reprocess) { 'COUNT(DISTINCT fh.FilePath)' } else { 'COUNT(*)' }
 
-    $leftJoinClause = ''
-    $leftJoinClause += if (-not $Reprocess) {
-        "LEFT JOIN MovedFile mf ON fh.FilePath = mf.SourcePath AND mf.Hash IS NOT NULL"
-    }
+        $leftJoinClause = ''
+        $leftJoinClause += if (-not $Reprocess) {
+            "LEFT JOIN MovedFile mf ON fh.FilePath = mf.SourcePath AND mf.Hash IS NOT NULL"
+        }
 
-    $whereClause = "WHERE a.AlgorithmName = @algorithm"
-    if ($individualConditions) {
-        $whereClause += " AND " + ($individualConditions -join " AND ")
-    }
+        $whereClause = "WHERE a.AlgorithmName = @algorithm"
+        if ($individualConditions) {
+            $whereClause += " AND " + ($individualConditions -join " AND ")
+        }
 
-    $havingClause = "HAVING COUNT(*) > 1"
-    if ($aggregatedConditions) {
-        $havingClause += " AND " + ($aggregatedConditions -join " AND ")
-    }
+        $havingClause = "HAVING COUNT(*) > 1"
+        if ($aggregatedConditions) {
+            $havingClause += " AND " + ($aggregatedConditions -join " AND ")
+        }
 
-    $orderByClause = "ORDER BY "
-    $orderByClause += switch ($OrderBy) {
-        'FilePaths' { 'GROUP_CONCAT(fh.FilePath)' }
-        'MaxProcessedAt'  { 'MAX(fh.ProcessedAt)' }
-        'MinProcessedAt'  { 'MIN(fh.ProcessedAt)' }
-    }
-    $orderByClause += if ($OrderDirection -match '^(Asc|a)') { ' ASC' } else { ' DESC' }
+        $orderByClause = "ORDER BY "
+        $orderByClause += switch ($OrderBy) {
+            'FilePaths' { 'GROUP_CONCAT(fh.FilePath)' }
+            'MaxProcessedAt'  { 'MAX(fh.ProcessedAt)' }
+            'MinProcessedAt'  { 'MIN(fh.ProcessedAt)' }
+        }
+        $orderByClause += if ($OrderDirection -match '^(Asc|a)') { ' ASC' } else { ' DESC' }
 
-    $query = @"
+        $query = @"
 SELECT
   fh.Hash
 , a.AlgorithmName     AS Algorithm
@@ -319,23 +305,40 @@ $havingClause
 $orderByClause
 "@
 
-    $queryParams = @{ algorithm = $Algorithm } + $individualParams + $aggregatedParams
-    try {
-        $groups = $db.InvokeQuery($query, $queryParams)
-        if (-not $groups) {
-            Write-Verbose "No duplicate files found for algorithm '$Algorithm'."
+        $queryParams = @{ algorithm = $Algorithm } + $individualParams + $aggregatedParams
+        try {
+            $groups = $db.InvokeQuery($query, $queryParams)
+            if (-not $groups) {
+                Write-Verbose "No duplicate files found for algorithm '$Algorithm'."
+            }
+        } catch {
+            throw "Failed to retrieve duplicate groups: $_"
         }
-    } catch {
-        throw "Failed to retrieve duplicate groups: $_"
+
+        $processedFiles = 0
+        $errorAction = if ($HaltOnFailure) { 'Stop' } else { 'Continue' }
+        $ndots = 64
+        $dots = '.' * $ndots
+        $interdotPauseMs = [math]::Round(1000 * $InterfilePauseSeconds / $ndots, 0)
     }
 
-    $processedFiles = 0
-    $errorAction = if ($HaltOnFailure) { 'Stop' } else { 'Continue' }
-    $ndots = 64
-    $dots = '.' * $ndots
-    $interdotPauseMs = [math]::Round(1000 * $InterfilePauseSeconds / $ndots, 0)
+    process {
+        # Validate and resolve Destination
+        try {
+            $Destination = [System.IO.Path]::GetFullPath($Destination)
+            "Resolved destination path: $Destination" | Write-Verbose
+            if ((Test-Path $Destination) -and -not (Test-Path $Destination -PathType Container)) {
+                throw "The destination path '$Destination' exists but is not a directory."
+            }
+            if (-not (Test-Path $Destination)) {
+                New-Item -Path $Destination -ItemType Directory -Force | Out-Null
+                "Created destination directory: $Destination" | Write-Verbose
+            }
+        } catch {
+            throw "Failed to create destination directory '$Destination': $_"
+        }
 
-    foreach ($group in $groups) {
+        foreach ($group in $groups) {
         if ($processedFiles -ge $MaxFiles) { break }
 
         $filesQueryTemplate = @"

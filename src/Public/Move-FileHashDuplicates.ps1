@@ -105,7 +105,7 @@
     queries.
 #>
 
-function Parameterize-Filters {
+function Convert-FiltersToParameters {
     param(
         [string[]]$Filters,
         [string]$Scope
@@ -164,11 +164,11 @@ function Get-DestinationPath {
     if (-not (Test-Path $destDirPath)) {
         New-Item -Path $destDirPath -ItemType Directory -Force | Out-Null
     }
-    $fileName = [System.IO.Path]::GetFileNameWithoutExtension($destPath)
+    $baseFileName = [System.IO.Path]::GetFileNameWithoutExtension($destPath)
     $extension = [System.IO.Path]::GetExtension($destPath)
     $counter = 1
     while (Test-Path $destPath) {
-        $newFileName = "$fileName_$counter$extension"
+        $newFileName = "$baseFileName`_$counter$extension"
         $destPath = Join-Path $destDirPath $newFileName
         "Resolved conflict by renaming to '$newFileName'" | Write-Verbose
         $counter++
@@ -268,11 +268,11 @@ function Move-FileHashDuplicates {
                              { $filters['aggregated'] }
                          else { @() }
 
-    # Parameterize filters
-    $individualConditions, $individualParams = Parameterize-Filters `
+    # Convert filters to parameters
+    $individualConditions, $individualParams = Convert-FiltersToParameters `
                                                    -Filters $individualFilters `
                                                    -Scope 'individual'
-    $aggregatedConditions, $aggregatedParams = Parameterize-Filters `
+    $aggregatedConditions, $aggregatedParams = Convert-FiltersToParameters `
                                                    -Filters $aggregatedFilters `
                                                    -Scope 'aggregated'
 

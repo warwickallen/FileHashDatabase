@@ -8,6 +8,8 @@ This prompt is activated by any of these phrases:
 ## Context
 You are committing staged changes to the FileHashDatabase repository using a commit message that follows the project's commit message guidelines.
 
+**Important**: PowerShell has specific requirements for handling newlines in commit messages. The helper script (`Scripts/commit-staged.ps1`) handles this automatically, but manual commits require careful attention to newline formatting.
+
 ## Commit Message Guidelines
 - **Format**: Follow [Conventional Commits 1.0.0](https://www.conventionalcommits.org/en/v1.0.0/)
 - **Header limit**: Maximum 50 characters (including the initial `<type>[optional scope]: `)
@@ -53,15 +55,14 @@ You are committing staged changes to the FileHashDatabase repository using a com
 5. Confirm conventional commit format compliance
 
 ### Step 4: Execute Commit
-1. **Commit format**: Use exactly two `-m` parameters:
+1. **Commit format for PowerShell**: Use exactly two `-m` parameters with actual line breaks:
    - First `-m`: Header message (conventional commit format)
-   - Second `-m`: Complete body message with proper newline characters:
-     - Single `\n` for word-wrapped lines
-     - `\n\n` for paragraph breaks
-2. **Avoid multiple `-m` parameters** as they create unwanted blank lines
-3. **CRITICAL**: Only commit staged changes - do NOT use `git add` to stage additional files
-4. Verify the commit was successful
-5. Display the commit hash and summary
+   - Second `-m`: Complete body message with actual line breaks (not `\n` escape sequences)
+2. **PowerShell syntax**: Use here-string or actual line breaks in the string
+3. **Avoid multiple `-m` parameters** as they create unwanted blank lines
+4. **CRITICAL**: Only commit staged changes - do NOT use `git add` to stage additional files
+5. Verify the commit was successful
+6. Display the commit hash and summary
 
 ## Output Format
 Provide:
@@ -78,15 +79,24 @@ When you see any of the trigger phrases above, automatically:
 3. Analyse the changes to determine the commit type
 4. Generate a conventional commit message following the guidelines
 5. Validate the message format and character limits
-6. **Execute commit with two `-m` parameters**:
-   - `git commit -m "header" -m "body with \n word-wrapped lines\n\nand \n\n paragraph breaks"`
+6. **Execute commit with proper newline handling**:
+   - **Option 1**: Use the helper script: `.\Scripts\commit-staged.ps1 -Type "type" -Description "description" -Body "body"`
+   - **Option 2**: Use git commit with message file: Create a temp file with the message and use `git commit -F filename`
+   - **Option 3**: Use here-string with proper escaping: `git commit -m "header" -m @"
+body with actual line breaks
+and paragraph breaks
+"@`
 7. Confirm the commit was successful
 
 ### Quick Commands
 Instead of manual git commands, you can now use:
-- `commit changes` - Quickest option
-- `commit staged` - Alternative short command
-- `commit with conventional message` - More explicit
+- `commit staged` - Quickest option
+- `commit staged changes` - Alternative short command
+
+### Helper Script
+For easier commit creation, use the helper script:
+- `.\Scripts\commit-staged.ps1 -Type "feat" -Description "add new feature" -Body "Detailed description"`
+- The script validates format and provides interactive confirmation
 
 ## Example Commit Messages
 
@@ -99,13 +109,20 @@ Instead of manual git commands, you can now use:
 - `test: add comprehensive test coverage for new functions`
 - `chore: update build scripts for PowerShell 5.1 compatibility`
 
-### Body Examples:
+### Body Examples (PowerShell format):
 ```
-Add comprehensive validation function for file hashes.\n\nThis function validates SHA256 hashes and provides detailed error\nmessages for invalid formats. Includes unit tests and documentation\nupdates.
+Add comprehensive validation function for file hashes.
+
+This function validates SHA256 hashes and provides detailed error
+messages for invalid formats. Includes unit tests and documentation
+updates.
 ```
 
 ```
-Resolve module import failures in unit tests.\n\nFixed missing function exports and updated test expectations to match\nactual module structure. All tests now pass successfully.
+Resolve module import failures in unit tests.
+
+Fixed missing function exports and updated test expectations to match
+actual module structure. All tests now pass successfully.
 ```
 
 Remember: Always use British English spelling and ensure the commit message clearly describes the changes made.

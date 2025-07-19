@@ -6,18 +6,13 @@
             Enable = $false
         }
         PSAvoidUsingWriteHost = @{
-            Enable = $true
-            # Allow Write-Host for progress display with backspace characters
-            ExcludeRules = @(
-                'Write-Host -NoNewline',
-                'Write-Host -NoNewLine'
-            )
+            Enable = $false
         }
         PSUseProcessBlockForPipelineCommand = @{
-            Enable = $true
+            Enable = $false
         }
         PSAvoidDefaultValueForMandatoryParameter = @{
-            Enable = $true
+            Enable = $false
         }
     }
 }

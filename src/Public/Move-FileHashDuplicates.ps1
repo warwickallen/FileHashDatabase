@@ -339,9 +339,9 @@ $orderByClause
         }
 
         foreach ($group in $groups) {
-        if ($processedFiles -ge $MaxFiles) { break }
+            if ($processedFiles -ge $MaxFiles) { break }
 
-        $filesQueryTemplate = @"
+            $filesQueryTemplate = @"
 SELECT
   fh.FilePath
 , fh.ProcessedAt
@@ -353,84 +353,85 @@ $whereClause
 AND fh.Hash = @hash
 $(if (-not $Reprocess) { " AND mf.SourcePath IS NULL" })
 "@
-        $fileParams = @{ hash = $group.Hash; algorithm = $Algorithm } + $individualParams
-        try {
-            $files = $db.InvokeQuery($filesQueryTemplate, $fileParams) | ForEach-Object {
-                [PSCustomObject]@{
-                    FilePath    = $_.FilePath
-                    ProcessedAt = $_.ProcessedAt
-                    PathLength  = $_.FilePath.Length
-                    NameLength  = ([System.IO.Path]::GetFileName($_.FilePath)).Length
+            $fileParams = @{ hash = $group.Hash; algorithm = $Algorithm } + $individualParams
+            try {
+                $files = $db.InvokeQuery($filesQueryTemplate, $fileParams) | ForEach-Object {
+                    [PSCustomObject]@{
+                        FilePath    = $_.FilePath
+                        ProcessedAt = $_.ProcessedAt
+                        PathLength  = $_.FilePath.Length
+                        NameLength  = ([System.IO.Path]::GetFileName($_.FilePath)).Length
+                    }
                 }
-            }
-        } catch {
-            Write-Error "Failed to retrieve files for hash '$($group.Hash)': $_" -ErrorAction $errorAction
-            continue
-        }
-
-        if ($files.Count -le 1) { continue }
-
-        $preserveFile = switch ($PreserveBy) {
-            'EarliestProcessed' { $files | Sort-Object ProcessedAt | Select-Object -First 1 }
-            'LongestPath'       { $files | Sort-Object PathLength -Descending | Select-Object -First 1 }
-            'ShortestPath'      { $files | Sort-Object PathLength | Select-Object -First 1 }
-            'LongestName'       { $files | Sort-Object NameLength -Descending | Select-Object -First 1 }
-        }
-        "Preserving file: $($preserveFile.FilePath)" | Write-Verbose
-
-        $toMove = $files | Where-Object { $_.FilePath -ne $preserveFile.FilePath }
-
-        foreach ($file in $toMove) {
-            if ($processedFiles -ge $MaxFiles) { break }
-            if (-not (Test-Path $file.FilePath)) {
-                "File not found: $($file.FilePath)" | Write-Warning
+            } catch {
+                Write-Error "Failed to retrieve files for hash '$($group.Hash)': $_" -ErrorAction $errorAction
                 continue
             }
 
-            $moveOrCopy      = if ($CopyMode) { 'Copy'    } else { 'Move'   }
-            $movedOrCopied   = if ($CopyMode) { 'Copied'  } else { 'Moved'  }
-            $movingOrCopying = if ($CopyMode) { 'Copying' } else { 'Moving' }
+            if ($files.Count -le 1) { continue }
 
-            $destPath = Get-DestinationPath -SourcePath $file.FilePath -DestinationRoot $Destination
-            "$movingOrCopying '$($file.FilePath)' to '$destPath'" | Write-Verbose
-
-            $fileName = [System.IO.Path]::GetFileName($file.FilePath)
-            $displayName = if ($fileName.Length -gt 64) {
-                $fileName.Substring(0, 61) + "..."
-            } else {
-                $fileName.PadRight(64)
+            $preserveFile = switch ($PreserveBy) {
+                'EarliestProcessed' { $files | Sort-Object ProcessedAt | Select-Object -First 1 }
+                'LongestPath'       { $files | Sort-Object PathLength -Descending | Select-Object -First 1 }
+                'ShortestPath'      { $files | Sort-Object PathLength | Select-Object -First 1 }
+                'LongestName'       { $files | Sort-Object NameLength -Descending | Select-Object -First 1 }
             }
-            $timestamp = (Get-Date).ToString('yyyyMMdd-HHmmss')
-            Write-Host -NoNewline "$timestamp $displayName $dots"
+            "Preserving file: $($preserveFile.FilePath)" | Write-Verbose
 
-            try {
-                if ($PSCmdlet.ShouldProcess($file.FilePath, "$moveOrCopy to $destPath")) {
-                    $params = @{
-                        Path        = $file.FilePath
-                        Destination = $destPath
-                        Force       = $true
-                        ErrorAction = 'Stop'
-                    }
-                    if ($CopyMode) {
-                        Copy-Item @params
-                    } else {
-                        Move-Item @params
-                    }
-                    $db.LogMovedFile($group.Hash, $Algorithm, $file.FilePath, $destPath, (Get-Date))
-                    for ($i = $ndots; $i -gt 0; $i--) {
-                        Start-Sleep -Milliseconds $interdotPauseMs
-                        Write-Host -NoNewline "`b `b"
-                    }
-                    Write-Host "[$movedOrCopied to $destPath]"
+            $toMove = $files | Where-Object { $_.FilePath -ne $preserveFile.FilePath }
+
+            foreach ($file in $toMove) {
+                if ($processedFiles -ge $MaxFiles) { break }
+                if (-not (Test-Path $file.FilePath)) {
+                    "File not found: $($file.FilePath)" | Write-Warning
+                    continue
                 }
-            } catch {
-                "Failed to $($moveOrCopy.ToLower()) '$($file.FilePath)' to '$destPath': $_" |
-                    Write-Error -ErrorAction $errorAction
-                $db.LogMovedFile($group.Hash, $Algorithm, $file.FilePath, $null, (Get-Date))
-                for ($i = $ndots; $i -gt 0; $i--) { Write-Host -NoNewline "`b `b" }
-                Write-Host "[Failed]"
+
+                $moveOrCopy      = if ($CopyMode) { 'Copy'    } else { 'Move'   }
+                $movedOrCopied   = if ($CopyMode) { 'Copied'  } else { 'Moved'  }
+                $movingOrCopying = if ($CopyMode) { 'Copying' } else { 'Moving' }
+
+                $destPath = Get-DestinationPath -SourcePath $file.FilePath -DestinationRoot $Destination
+                "$movingOrCopying '$($file.FilePath)' to '$destPath'" | Write-Verbose
+
+                $fileName = [System.IO.Path]::GetFileName($file.FilePath)
+                $displayName = if ($fileName.Length -gt 64) {
+                    $fileName.Substring(0, 61) + "..."
+                } else {
+                    $fileName.PadRight(64)
+                }
+                $timestamp = (Get-Date).ToString('yyyyMMdd-HHmmss')
+                Write-Host -NoNewline "$timestamp $displayName $dots"
+
+                try {
+                    if ($PSCmdlet.ShouldProcess($file.FilePath, "$moveOrCopy to $destPath")) {
+                        $params = @{
+                            Path        = $file.FilePath
+                            Destination = $destPath
+                            Force       = $true
+                            ErrorAction = 'Stop'
+                        }
+                        if ($CopyMode) {
+                            Copy-Item @params
+                        } else {
+                            Move-Item @params
+                        }
+                        $db.LogMovedFile($group.Hash, $Algorithm, $file.FilePath, $destPath, (Get-Date))
+                        for ($i = $ndots; $i -gt 0; $i--) {
+                            Start-Sleep -Milliseconds $interdotPauseMs
+                            Write-Host -NoNewline "`b `b"
+                        }
+                        Write-Host "[$movedOrCopied to $destPath]"
+                    }
+                } catch {
+                    "Failed to $($moveOrCopy.ToLower()) '$($file.FilePath)' to '$destPath': $_" |
+                        Write-Error -ErrorAction $errorAction
+                    $db.LogMovedFile($group.Hash, $Algorithm, $file.FilePath, $null, (Get-Date))
+                    for ($i = $ndots; $i -gt 0; $i--) { Write-Host -NoNewline "`b `b" }
+                    Write-Host "[Failed]"
+                }
+                $processedFiles++
             }
-            $processedFiles++
         }
     }
 }

@@ -10,6 +10,8 @@ You are committing staged changes to the FileHashDatabase repository using a com
 
 **Important**: PowerShell has specific requirements for handling newlines in commit messages. The helper script (`Scripts/commit-staged.ps1`) handles this automatically, but manual commits require careful attention to newline formatting.
 
+**Git Pager Note**: When running git commands that might invoke a pager (like `git log`, `git show`, `git diff`), use `git --no-pager` to prevent console errors and avoid manual interaction with the pager.
+
 ## Commit Message Guidelines
 - **Format**: Follow [Conventional Commits 1.0.0](https://www.conventionalcommits.org/en/v1.0.0/)
 - **Header limit**: Maximum 50 characters (including the initial `<type>[optional scope]: `)
@@ -30,7 +32,7 @@ You are committing staged changes to the FileHashDatabase repository using a com
 ## Workflow Instructions
 
 ### Step 1: Check Staged Changes
-1. Check what files are currently staged for commit using `git status`
+1. Check what files are currently staged for commit using `git --no-pager status`
 2. **IMPORTANT**: Only commit staged changes - do NOT stage additional files
 3. Analyse the nature of the changes (additions, modifications, deletions)
 4. Determine the appropriate commit type based on the changes
@@ -74,7 +76,7 @@ Provide:
 
 ## Example Usage
 When you see any of the trigger phrases above, automatically:
-1. Check what files are staged using `git status`
+1. Check what files are staged using `git --no-pager status`
 2. **VERIFY**: Only staged changes will be committed - do NOT stage additional files
 3. Analyse the changes to determine the commit type
 4. Generate a conventional commit message following the guidelines
@@ -86,7 +88,7 @@ When you see any of the trigger phrases above, automatically:
 body with actual line breaks
 and paragraph breaks
 "@`
-7. Confirm the commit was successful
+7. Confirm the commit was successful using `git --no-pager log --oneline -1`
 
 ### Quick Commands
 Instead of manual git commands, you can now use:

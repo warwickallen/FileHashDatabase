@@ -2,13 +2,8 @@
 
 ## Trigger Phrases
 This prompt is activated by any of these phrases:
-- "commit changes"
 - "commit staged"
-- "commit with conventional message"
-- "commit following guidelines"
-- "commit with proper format"
 - "commit staged changes"
-- "commit with conventional commits"
 
 ## Context
 You are committing staged changes to the FileHashDatabase repository using a commit message that follows the project's commit message guidelines.
@@ -33,30 +28,40 @@ You are committing staged changes to the FileHashDatabase repository using a com
 ## Workflow Instructions
 
 ### Step 1: Check Staged Changes
-1. Check what files are currently staged for commit
-2. Analyse the nature of the changes (additions, modifications, deletions)
-3. Determine the appropriate commit type based on the changes
+1. Check what files are currently staged for commit using `git status`
+2. **IMPORTANT**: Only commit staged changes - do NOT stage additional files
+3. Analyse the nature of the changes (additions, modifications, deletions)
+4. Determine the appropriate commit type based on the changes
 
 ### Step 2: Generate Commit Message
 1. **Determine type**: Based on the staged changes, select the appropriate conventional commit type
 2. **Optional scope**: Add scope if relevant (e.g., `feat(module)`, `fix(tests)`)
 3. **Description**: Write a clear, concise description in British English
-4. **Body**: If needed, add a detailed explanation with proper line wrapping
+4. **Body**: If needed, add a detailed explanation with proper line wrapping:
+   - Use single `\n` for word-wrapped lines (to stay under 72 characters)
+   - Use `\n\n` only for intentional paragraph breaks
+   - Each line should be ≤ 72 characters
 5. **Footer**: Add any breaking changes, issue references, or co-authors if applicable
 
 ### Step 3: Validate Commit Message
 1. Ensure header is ≤ 50 characters
 2. Ensure body lines are ≤ 72 characters
-3. Verify British English spelling and grammar
-4. Confirm conventional commit format compliance
+3. Verify proper newline usage:
+   - Single `\n` for word-wrapped lines
+   - `\n\n` only for paragraph breaks
+4. Verify British English spelling and grammar
+5. Confirm conventional commit format compliance
 
 ### Step 4: Execute Commit
 1. **Commit format**: Use exactly two `-m` parameters:
    - First `-m`: Header message (conventional commit format)
-   - Second `-m`: Complete body message with newline characters (`\n`) for line breaks
+   - Second `-m`: Complete body message with proper newline characters:
+     - Single `\n` for word-wrapped lines
+     - `\n\n` for paragraph breaks
 2. **Avoid multiple `-m` parameters** as they create unwanted blank lines
-3. Verify the commit was successful
-4. Display the commit hash and summary
+3. **CRITICAL**: Only commit staged changes - do NOT use `git add` to stage additional files
+4. Verify the commit was successful
+5. Display the commit hash and summary
 
 ## Output Format
 Provide:
@@ -68,13 +73,14 @@ Provide:
 
 ## Example Usage
 When you see any of the trigger phrases above, automatically:
-1. Check what files are staged using `git status --porcelain`
-2. Analyse the changes to determine the commit type
-3. Generate a conventional commit message following the guidelines
-4. Validate the message format and character limits
-5. **Execute commit with two `-m` parameters**:
-   - `git commit -m "header" -m "body with \n line breaks"`
-6. Confirm the commit was successful
+1. Check what files are staged using `git status`
+2. **VERIFY**: Only staged changes will be committed - do NOT stage additional files
+3. Analyse the changes to determine the commit type
+4. Generate a conventional commit message following the guidelines
+5. Validate the message format and character limits
+6. **Execute commit with two `-m` parameters**:
+   - `git commit -m "header" -m "body with \n word-wrapped lines\n\nand \n\n paragraph breaks"`
+7. Confirm the commit was successful
 
 ### Quick Commands
 Instead of manual git commands, you can now use:
@@ -95,11 +101,11 @@ Instead of manual git commands, you can now use:
 
 ### Body Examples:
 ```
-Add comprehensive validation function for file hashes.\n\nThis function validates SHA256 hashes and provides detailed error messages for invalid formats. Includes unit tests and documentation updates.
+Add comprehensive validation function for file hashes.\n\nThis function validates SHA256 hashes and provides detailed error\nmessages for invalid formats. Includes unit tests and documentation\nupdates.
 ```
 
 ```
-Resolve module import failures in unit tests.\n\nFixed missing function exports and updated test expectations to match actual module structure. All tests now pass successfully.
+Resolve module import failures in unit tests.\n\nFixed missing function exports and updated test expectations to match\nactual module structure. All tests now pass successfully.
 ```
 
 Remember: Always use British English spelling and ensure the commit message clearly describes the changes made.

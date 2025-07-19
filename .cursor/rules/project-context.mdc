@@ -25,4 +25,8 @@ alwaysApply: true
 - Follow PowerShell best practices
 - Maintain Windows compatibility
 - Include comprehensive tests
-- Use British English in documentation and comments
+- Use British English in documentation, comments and commit messages
+- For commit messages:
+  - Limit the header to a maximum of 50 characters
+  - Word-wrap the body so that no line exceeds 72 characters
+  - Follow the conventions specified by [Conventional Commits 1.0.0](https://www.conventionalcommits.org/en/v1.0.0/)

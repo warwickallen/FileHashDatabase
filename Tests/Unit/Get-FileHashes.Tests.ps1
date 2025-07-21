@@ -3,35 +3,30 @@ BeforeAll {
     Import-Module $ModulePath -Force
 }
 
-Describe "Get-FileHashRecord" {
-    Context "Function Availability" {
-        It "Should be available after module import" {
-            Get-Command Get-FileHashRecord | Should -Not -BeNullOrEmpty
-        }
+Describe "Get-FileHashRecord.Function Availability" {
+    It "Should be available after module import" {
+        Get-Command Get-FileHashRecord | Should -Not -BeNullOrEmpty
+    }
+    It "Should have expected parameters" {
+        $params = (Get-Command Get-FileHashRecord).Parameters.Keys
+        $params | Should -Contain 'DatabasePath'
+        $params | Should -Contain 'Limit'
+        $params | Should -Contain 'Filter'
+    }
+}
 
-        It "Should have expected parameters" {
-            $command = Get-Command Get-FileHashRecord
-            $expectedParams = @('DatabasePath')
+Describe "Get-FileHashRecord.Basic Functionality" {
+    BeforeAll {
+        # Create test files in TestDrive
+        $testFile1 = Join-Path $TestDrive "test1.txt"
+        $testFile2 = Join-Path $TestDrive "test2.txt"
+        Set-Content -Path $testFile1 -Value "Test content 1"
+        Set-Content -Path $testFile2 -Value "Test content 2"
 
-            foreach ($param in $expectedParams) {
-                $command.Parameters.Keys | Should -Contain $param -Because "Parameter $param should exist"
-            }
-        }
+        $testDb = Join-Path $TestDrive "test.db"
     }
 
-    Context "Basic Functionality" -Tag "RequiresTestFiles" {
-        BeforeAll {
-            # Create test files in TestDrive
-            $testFile1 = Join-Path $TestDrive "test1.txt"
-            $testFile2 = Join-Path $TestDrive "test2.txt"
-            Set-Content -Path $testFile1 -Value "Test content 1"
-            Set-Content -Path $testFile2 -Value "Test content 2"
-
-            $testDb = Join-Path $TestDrive "test.db"
-        }
-
-        It "Should process files without errors" {
-            { Get-FileHashRecord -DatabasePath $testDb } | Should -Not -Throw
-        }
+    It "Should process files without errors" {
+        { Get-FileHashRecord -DatabasePath $testDb } | Should -Not -Throw
     }
 }

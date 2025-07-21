@@ -228,7 +228,7 @@ if ($classLoaded) {
 # Export functions (this should match your manifest)
 Export-ModuleMember -Function @(
     'Get-FileHashRecord',
-    'Move-FileHashDuplicates',
+    'Move-FileHashDuplicate',
     'Write-FileHashRecord'
 )
 

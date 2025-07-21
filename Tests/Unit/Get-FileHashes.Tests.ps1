@@ -3,14 +3,14 @@ BeforeAll {
     Import-Module $ModulePath -Force
 }
 
-Describe "Get-FileHashes" {
+Describe "Get-FileHashRecord" {
     Context "Function Availability" {
         It "Should be available after module import" {
-            Get-Command Get-FileHashes | Should -Not -BeNullOrEmpty
+            Get-Command Get-FileHashRecord | Should -Not -BeNullOrEmpty
         }
 
         It "Should have expected parameters" {
-            $command = Get-Command Get-FileHashes
+            $command = Get-Command Get-FileHashRecord
             $expectedParams = @('DatabasePath')
 
             foreach ($param in $expectedParams) {
@@ -31,7 +31,7 @@ Describe "Get-FileHashes" {
         }
 
         It "Should process files without errors" {
-            { Get-FileHashes -DatabasePath $testDb } | Should -Not -Throw
+            { Get-FileHashRecord -DatabasePath $testDb } | Should -Not -Throw
         }
     }
 }

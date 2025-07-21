@@ -12,7 +12,7 @@ Describe "FileHashDatabase Module" {
 
         It "Should export expected commands" {
             $commands = Get-Command -Module FileHashDatabase
-            $expectedCommands = @('Get-FileHashes', 'Move-FileHashDuplicates', 'Write-FileHashes')
+            $expectedCommands = @('Get-FileHashRecord', 'Move-FileHashDuplicates', 'Write-FileHashRecord')
 
             foreach ($expected in $expectedCommands) {
                 $commands.Name | Should -Contain $expected

@@ -156,8 +156,8 @@ Describe "Module Basic Tests" {
     It "Should have all expected functions exported" {
         $expectedFunctions = @(
             'Move-FileHashDuplicates',
-            'Get-FileHashes',
-            'Write-FileHashes'
+            'Get-FileHashRecord',
+            'Write-FileHashRecord'
         )
 
         foreach ($functionName in $expectedFunctions) {

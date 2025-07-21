@@ -49,7 +49,7 @@ Describe "End-to-End Integration Tests" -Tag "Integration", "E2E" {
             }
 
             # Step 1: Scan and store hashes (use actual function signature)
-            { Get-FileHashes -DatabasePath $script:testDbPath } | Should -Not -Throw
+            { Get-FileHashRecord -DatabasePath $script:testDbPath } | Should -Not -Throw
 
             # Verify database was created
             Test-Path $script:testDbPath | Should -Be $true
@@ -58,7 +58,7 @@ Describe "End-to-End Integration Tests" -Tag "Integration", "E2E" {
             { Move-FileHashDuplicates -DatabasePath $script:testDbPath -Destination $script:duplicatesPath } | Should -Not -Throw
 
             # Step 3: Export results (use actual function signature - no OutputPath parameter)
-            { Write-FileHashes -DatabasePath $script:testDbPath } | Should -Not -Throw
+            { Write-FileHashRecord -DatabasePath $script:testDbPath } | Should -Not -Throw
         }
 
         It "Should handle file processing efficiently" {
@@ -71,7 +71,7 @@ Describe "End-to-End Integration Tests" -Tag "Integration", "E2E" {
             # Measure performance
             $stopwatch = [System.Diagnostics.Stopwatch]::StartNew()
 
-            Get-FileHashes -DatabasePath $script:testDbPath
+            Get-FileHashRecord -DatabasePath $script:testDbPath
             Move-FileHashDuplicates -DatabasePath $script:testDbPath -Destination $script:duplicatesPath
 
             $stopwatch.Stop()
@@ -86,7 +86,7 @@ Describe "End-to-End Integration Tests" -Tag "Integration", "E2E" {
             # Create a test file
             "Test content" | Out-File -FilePath (Join-Path $TestDrive "test.txt") -Encoding UTF8
 
-            Get-FileHashes -DatabasePath $script:testDbPath
+            Get-FileHashRecord -DatabasePath $script:testDbPath
 
             # Verify database was created
             Test-Path $script:testDbPath | Should -Be $true
@@ -111,7 +111,7 @@ Describe "End-to-End Integration Tests" -Tag "Integration", "E2E" {
             "Test content 2" | Out-File -FilePath (Join-Path $TestDrive "consistent2.txt") -Encoding UTF8
 
             # Initial scan
-            Get-FileHashes -DatabasePath $script:testDbPath
+            Get-FileHashRecord -DatabasePath $script:testDbPath
 
             # Verify database exists after operation
             Test-Path $script:testDbPath | Should -Be $true
@@ -124,7 +124,7 @@ Describe "End-to-End Integration Tests" -Tag "Integration", "E2E" {
             $challengingDbPath = Join-Path $TestDrive "subdir\another\database.db"
 
             # Your function likely creates the directory structure, which is good behavior
-            { Get-FileHashes -DatabasePath $challengingDbPath } | Should -Not -Throw
+            { Get-FileHashRecord -DatabasePath $challengingDbPath } | Should -Not -Throw
 
             # Verify that the directory was created (if that's what your function does)
             $dbDir = Split-Path $challengingDbPath -Parent
@@ -136,13 +136,13 @@ Describe "End-to-End Integration Tests" -Tag "Integration", "E2E" {
             New-Item -Path $emptyDir -ItemType Directory -Force
 
             # Test depends on actual function signature
-            { Get-FileHashes -DatabasePath $script:testDbPath } | Should -Not -Throw
+            { Get-FileHashRecord -DatabasePath $script:testDbPath } | Should -Not -Throw
         }
 
         It "Should handle missing destination directories" {
             # Create a test database first
             "Test content" | Out-File -FilePath (Join-Path $TestDrive "test.txt") -Encoding UTF8
-            Get-FileHashes -DatabasePath $script:testDbPath
+            Get-FileHashRecord -DatabasePath $script:testDbPath
 
             $nonExistentDest = Join-Path $TestDrive "nonexistent_destination"
             { Move-FileHashDuplicates -DatabasePath $script:testDbPath -Destination $nonExistentDest } | Should -Not -Throw

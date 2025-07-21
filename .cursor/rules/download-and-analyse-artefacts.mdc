@@ -28,9 +28,9 @@ You are downloading the latest GitHub Actions artefacts using the `Tests/get-art
    - **Unix/Linux/macOS**: Use `Tests/get-artefacts.sh`
 2. Execute the appropriate script to download the latest GitHub Actions artefacts
 3. The script will:
-   - Get the latest run ID from GitHub Actions
+   - Get the latest run ID from GitHub Actions (or, if not available, use the run folder with the highest run number in `Tests/Artefacts`)
    - Download artefacts to `Tests/Artefacts/run-{RUN_ID}/`
-   - Create/update symlink `Tests/Artefacts/latest/` pointing to the new artefacts
+   - (The 'latest' symlink is no longer created or used)
 4. Verify the download was successful
 
 ### Step 2: Analyse PSScriptAnalyzer Results (`analyzer-results.xml`)
@@ -85,7 +85,7 @@ When you see any of the trigger phrases above, automatically:
    - **Windows PowerShell**: `Tests/get-artefacts.ps1`
    - **Unix/Linux/macOS**: `Tests/get-artefacts.sh`
 2. Verify the download was successful and note the run ID
-3. Read and parse both XML files in `Tests/Artefacts/latest/`
+3. Read and parse both XML files in the selected `Tests/Artefacts/run-{RUN_ID}/` folder (if no run ID is specified, use the folder with the highest run number)
 4. Analyse the current codebase structure
 5. Identify root causes of failures
 6. Propose specific fixes with code changes

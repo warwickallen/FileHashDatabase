@@ -6,9 +6,15 @@ param(
 )
 
 if ([string]::IsNullOrEmpty($RunId)) {
-    Write-Host "No run ID provided, using latest run"
-    $RunId = gh run list --limit 1 --json databaseId --jq '.[0].databaseId'
-    Write-Host "Using run ID: $RunId"
+    Write-Host "No run ID provided, searching for highest run folder in Tests/Artefacts"
+    $artefactsRoot = Join-Path $repoDir "Tests\Artefacts"
+    $runFolders = Get-ChildItem -Path $artefactsRoot -Directory -Filter 'run-*' | Where-Object { $_.Name -match '^run-\\d+$' }
+    if ($runFolders.Count -eq 0) {
+        throw "No run folders found in $artefactsRoot"
+    }
+    $highestRunFolder = $runFolders | Sort-Object { [int]($_.Name -replace '^run-', '') } -Descending | Select-Object -First 1
+    $RunId = $highestRunFolder.Name -replace '^run-', ''
+    Write-Host "Using highest run folder: $($highestRunFolder.Name) (RunId: $RunId)"
 }
 
 $artefacts = @(
@@ -25,13 +31,6 @@ while (-not (Test-Path (Join-Path $repoDir ".git"))) {
 }
 
 $artefactsDir = Join-Path $repoDir "Tests\Artefacts\run-$RunId"
-$latestLink = Join-Path $repoDir "Tests\Artefacts\latest"
-
-# Create directory junction (Windows equivalent, doesn't require admin privileges)
-if (Test-Path $latestLink) {
-    Remove-Item $latestLink -Force -Recurse
-}
-New-Item -ItemType Junction -Path $latestLink -Target $artefactsDir -Force | Out-Null
 
 # Create artefacts directory
 New-Item -ItemType Directory -Path $artefactsDir -Force | Out-Null
@@ -42,4 +41,3 @@ foreach ($artefact in $artefacts) {
 }
 
 Write-Host "Artefacts downloaded to: $artefactsDir"
-Write-Host "Latest artefacts are linked to: $latestLink"

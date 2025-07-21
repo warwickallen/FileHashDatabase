@@ -70,9 +70,9 @@ ScriptsToProcess = @('Private\FileHashDatabase.ps1')
 
 # Functions to export from this module, for best performance, do not use wildcards and do not delete the entry, use an empty array if there are no functions to export.
 FunctionsToExport = @(
-    'Get-FileHashes',
+    'Get-FileHashRecord',
     'Move-FileHashDuplicates',
-    'Write-FileHashes'
+    'Write-FileHashRecord'
 )
 
 # Cmdlets to export from this module, for best performance, do not use wildcards and do not delete the entry, use an empty array if there are no cmdlets to export.

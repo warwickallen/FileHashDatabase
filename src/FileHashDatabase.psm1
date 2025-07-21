@@ -227,9 +227,9 @@ if ($classLoaded) {
 
 # Export functions (this should match your manifest)
 Export-ModuleMember -Function @(
-    'Get-FileHashes',
+    'Get-FileHashRecord',
     'Move-FileHashDuplicates',
-    'Write-FileHashes'
+    'Write-FileHashRecord'
 )
 
 # Export the Config variable for use by functions

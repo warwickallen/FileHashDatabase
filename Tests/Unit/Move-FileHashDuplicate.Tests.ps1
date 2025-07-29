@@ -1,4 +1,4 @@
-# Move-FileHashDuplicates.Tests.ps1
+# Move-FileHashDuplicate.Tests.ps1
 
 BeforeAll {
     # Determine module path with better error handling
@@ -139,14 +139,14 @@ BeforeAll {
 }
 
 Describe "Module Basic Tests" {
-    It "Should have Move-FileHashDuplicates function available" {
-        $command = Get-Command -Name Move-FileHashDuplicates -ErrorAction SilentlyContinue
+    It "Should have Move-FileHashDuplicate function available" {
+        $command = Get-Command -Name Move-FileHashDuplicate -ErrorAction SilentlyContinue
         $command | Should -Not -BeNullOrEmpty
         $command.CommandType | Should -Be 'Function'
     }
 
     It "Should have required parameters" {
-        $command = Get-Command -Name Move-FileHashDuplicates
+        $command = Get-Command -Name Move-FileHashDuplicate
         $params = $command.Parameters.Keys
         $params | Should -Contain 'Destination'
         $params | Should -Contain 'DatabasePath'
@@ -155,7 +155,7 @@ Describe "Module Basic Tests" {
 
     It "Should have all expected functions exported" {
         $expectedFunctions = @(
-            'Move-FileHashDuplicates',
+            'Move-FileHashDuplicate',
             'Get-FileHashRecord',
             'Write-FileHashRecord'
         )
@@ -168,9 +168,9 @@ Describe "Module Basic Tests" {
 }
 
 Describe "Function Parameter Validation" {
-    Context "Move-FileHashDuplicates Parameters" {
+    Context "Move-FileHashDuplicate Parameters" {
         It "Should validate parameter types correctly" {
-            $command = Get-Command -Name Move-FileHashDuplicates
+            $command = Get-Command -Name Move-FileHashDuplicate
             $parameters = $command.Parameters
 
             # Test parameter types
@@ -181,7 +181,7 @@ Describe "Function Parameter Validation" {
 
         It "Should handle WhatIf parameter" {
             # This should not throw an exception
-            { Move-FileHashDuplicates -DatabasePath "test.db" -Destination $script:StagingDir -Algorithm 'SHA256' -WhatIf } | Should -Not -Throw
+            { Move-FileHashDuplicate -DatabasePath "test.db" -Destination $script:StagingDir -Algorithm 'SHA256' -WhatIf } | Should -Not -Throw
         }
     }
 }
@@ -247,7 +247,7 @@ Describe "Class-Dependent Tests" -Skip:$script:SkipClassTests {
 }
 
 Describe "Integration Tests" -Skip:$script:SkipSQLiteTests {
-    It "Should be able to call Move-FileHashDuplicates with valid parameters" -Skip:($script:SkipSQLiteTests) {
+    It "Should be able to call Move-FileHashDuplicate with valid parameters" -Skip:($script:SkipSQLiteTests) {
         # Create a temporary database file to test with
         $tempDbPath = Join-Path $script:TempDir "IntegrationTest_$(Get-Random).db"
 
@@ -262,7 +262,7 @@ Describe "Integration Tests" -Skip:$script:SkipSQLiteTests {
             $errorOccurred = $false
 
             try {
-                Move-FileHashDuplicates -DatabasePath $tempDbPath -Destination $script:StagingDir -Algorithm 'SHA256' -WhatIf -ErrorAction Stop
+                Move-FileHashDuplicate -DatabasePath $tempDbPath -Destination $script:StagingDir -Algorithm 'SHA256' -WhatIf -ErrorAction Stop
                 Write-Host "✅ Function call succeeded (WhatIf mode)"
             } catch {
                 $errorOccurred = $true

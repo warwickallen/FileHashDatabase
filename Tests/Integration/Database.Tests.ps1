@@ -55,7 +55,7 @@ Describe "End-to-End Integration Tests" -Tag "Integration", "E2E" {
             Test-Path $script:testDbPath | Should -Be $true
 
             # Step 2: Identify and move duplicates (use actual function signature)
-            { Move-FileHashDuplicates -DatabasePath $script:testDbPath -Destination $script:duplicatesPath } | Should -Not -Throw
+            { Move-FileHashDuplicate -DatabasePath $script:testDbPath -Destination $script:duplicatesPath } | Should -Not -Throw
 
             # Step 3: Export results (use actual function signature - no OutputPath parameter)
             { Write-FileHashRecord -DatabasePath $script:testDbPath } | Should -Not -Throw
@@ -72,7 +72,7 @@ Describe "End-to-End Integration Tests" -Tag "Integration", "E2E" {
             $stopwatch = [System.Diagnostics.Stopwatch]::StartNew()
 
             Get-FileHashRecord -DatabasePath $script:testDbPath
-            Move-FileHashDuplicates -DatabasePath $script:testDbPath -Destination $script:duplicatesPath
+            Move-FileHashDuplicate -DatabasePath $script:testDbPath -Destination $script:duplicatesPath
 
             $stopwatch.Stop()
 
@@ -82,7 +82,7 @@ Describe "End-to-End Integration Tests" -Tag "Integration", "E2E" {
     }
 
     Context "Database Schema and Data Integrity" {
-        It "Should create database when running Get-FileHashes" {
+        It "Should create database when running Get-FileHashRecord" {
             # Create a test file
             "Test content" | Out-File -FilePath (Join-Path $TestDrive "test.txt") -Encoding UTF8
 
@@ -145,7 +145,7 @@ Describe "End-to-End Integration Tests" -Tag "Integration", "E2E" {
             Get-FileHashRecord -DatabasePath $script:testDbPath
 
             $nonExistentDest = Join-Path $TestDrive "nonexistent_destination"
-            { Move-FileHashDuplicates -DatabasePath $script:testDbPath -Destination $nonExistentDest } | Should -Not -Throw
+            { Move-FileHashDuplicate -DatabasePath $script:testDbPath -Destination $nonExistentDest } | Should -Not -Throw
 
             # Verify destination was created
             Test-Path $nonExistentDest | Should -Be $true

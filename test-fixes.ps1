@@ -34,7 +34,7 @@ if ($unusedVariableFound) {
 
 # Test 5: Check for unapproved verb (should be fixed)
 $unapprovedVerbFound = Get-ChildItem -Path ./src -Recurse -Filter "*.ps1" |
-    Select-String -Pattern "function Parameterize-Filters" -Quiet
+    Select-String -Pattern "function Parameterize-Filter" -Quiet
 if ($unapprovedVerbFound) {
     Write-Host "✗ Unapproved verb 'Parameterize' still found" -ForegroundColor Red
 } else {

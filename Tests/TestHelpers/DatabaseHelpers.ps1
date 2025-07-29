@@ -13,7 +13,7 @@ function Test-DatabaseConnection {
     return $false
 }
 
-function Get-DatabaseTables {
+function Get-DatabaseTable {
     param([string]$DatabasePath)
 
     if (Get-Module -ListAvailable PSSQLite) {

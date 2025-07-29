@@ -3,21 +3,21 @@
     Retrieves file hash records from the SQLite database.
 
 .DESCRIPTION
-    The Get-FileHashes function returns a list of files according to their hash values from
+    The Get-FileHashRecord function returns a list of files according to their hash values from
     information stored in the SQLite database.
 
     The returned objects have this structure:
 
         {
             Hash  = { [String]Hash, [String]Algorithm }   # A unique (hash value, algorithm) key
-            Paths = ( [String]Path, ... )        # An array of the paths of the files having this hash key
-            Count = [Integer]FileCount           # The number of files files having this hash key
-            Size  = [Integer]FileSize            # The size of the file(s), in bytes
+            Paths = ( [String]Path, ... )  # An array of the paths of the files having this hash key
+            Count = [Integer]FileCount     # The number of files files having this hash key
+            Size  = [Integer]FileSize      # The size of the file(s), in bytes
             FirstProcessed = [DateTime]Timestamp          # The earliest and latest times any of the
             LastProcessed  = [DateTime]Timestamp          # matching files were processed
         }
 
-    By default, the function uses the database path at "$env:APPDATA\FileHashDatabase\FileHashes.db".
+    By default, the function uses the database path "$env:APPDATA\FileHashDatabase\FileHashes.db".
     You can specify a different database file using the -DatabasePath parameter.
 
 .PARAMETER DatabasePath
@@ -42,29 +42,29 @@
     Displays this help message and exits.
 
 .EXAMPLE
-    Get-FileHashes
+    Get-FileHashRecord
     Returns file hash records from the default database.
 
 .EXAMPLE
-    Get-FileHashes -DatabasePath "C:\Temp\FileHashes.db"
+    Get-FileHashRecord -DatabasePath "C:\Temp\FileHashes.db"
     Returns file hash records from the specified database file.
 
 .EXAMPLE
-    Get-FileHashes -Limit 4 -Filter "FileCount > 1", 'FilePaths LIKE "%.jpg%"'
+    Get-FileHashRecord -Limit 4 -Filter "FileCount > 1", 'FilePaths LIKE "%.jpg%"'
     Returns the first four records that have multiple paths, at least one of which contains the
     characters ".jpg".
 
 .EXAMPLE
-    Get-FileHashes -Help
+    Get-FileHashRecord -Help
     Displays the help message for the function.
 
 .NOTES
     Requires the PSSQLite module to be installed and available in the PowerShell session.
 
-    The Get-FileHashes function returns transformed information from the DeduplicatedFile view in the
-    SQLite database. The returned objects are transformed as follows:
-        - 'Hash' and 'Algorithm' are combined into a nested object labelled 'Hash' with keys: 'Hash' and
-            'Algorithm'.
+    The Get-FileHashRecord function returns transformed information from the DeduplicatedFile view
+    in the SQLite database. The returned objects are transformed as follows:
+        - 'Hash' and 'Algorithm' are combined into a nested object labelled 'Hash' with keys:
+            'Hash' and 'Algorithm'.
         - 'FilePaths' is split on newline characters and returned as an array labelled 'Paths'.
         - 'MaxFileSize' is relabelled to 'Size'.
         - 'MinProcessedAt' (GMT Unix timestamp) is relabelled to 'FirstProcessed' and converted to a

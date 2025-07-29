@@ -14,19 +14,19 @@ function New-TestFile {
     return Get-Item $Path
 }
 
-function Assert-FileExists {
+function Assert-FileExistence {
     param([string]$Path)
 
     Test-Path $Path | Should -Be $true
 }
 
-function Assert-FileNotExists {
+function Assert-FileNonExistence {
     param([string]$Path)
 
     Test-Path $Path | Should -Be $false
 }
 
-function New-DuplicateTestFiles {
+function New-DuplicateTestFile {
     param(
         [string]$BasePath,
         [string]$Content = "Duplicate content for testing",

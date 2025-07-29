@@ -4,11 +4,11 @@
     SQLite.
 
 .DESCRIPTION
-    The Write-FileHashes function scans a specified directory and computes file hashes using the
+    The Write-FileHashRecord function scans a specified directory and computes file hashes using the
     specified algorithm (default SHA256). It displays a progress indicator with dots and handles
-    retries for failed hash computations. The function can pause between files, retry failed attempts,
-    and optionally halt on errors. File names are formatted to a specified display length for
-    consistent output.
+    retries for failed hash computations. The function can pause between files, retry failed
+    attempts, and optionally halt on errors. File names are formatted to a specified display length
+    for consistent output.
 
     Each file that has been attempted to be processed is logged to a SQLite database, including
     failed attempts. For failed hash attempts, the hash value is NULL. The database's default
@@ -86,32 +86,33 @@
     Displays this help message and exits.
 
 .EXAMPLE
-    .\Write-FileHashes.ps1 -ScanDirectory "C:\Data" -InterfilePauseSeconds 10
-    Scans the "C:\Data" directory, computing SHA256 file hashes with a 10-second pause between files.
+    .\Write-FileHashRecord.ps1 -ScanDirectory "C:\Data" -InterfilePauseSeconds 10
+    Scans the "C:\Data" directory, computing SHA256 file hashes with a 10-second pause between
+    files.
 
 .EXAMPLE
-    .\Write-FileHashes.ps1 -HaltOnFailure $true -RetryAttempts 3 -Algorithm SHA512
+    .\Write-FileHashRecord.ps1 -HaltOnFailure $true -RetryAttempts 3 -Algorithm SHA512
     Scans the current directory with SHA512, stopping on any error, with 3 retry attempts for failed
     hash computations.
 
 .EXAMPLE
-    .\Write-FileHashes.ps1 -NoReprocess
+    .\Write-FileHashRecord.ps1 -NoReprocess
     Scans the current directory, skipping files whose path exists in the database.
 
 .EXAMPLE
-    .\Write-FileHashes.ps1 -RandomOrder
+    .\Write-FileHashRecord.ps1 -RandomOrder
     Scans the current directory and processes files in a random order.
 
 .EXAMPLE
-    .\Write-FileHashes.ps1 -Recurse
+    .\Write-FileHashRecord.ps1 -Recurse
     Scans the current directory and all subdirectories for files.
 
 .EXAMPLE
-    .\Write-FileHashes.ps1 -MaxFiles 100
+    .\Write-FileHashRecord.ps1 -MaxFiles 100
     Scans up to 100 files from the source.
 
 .EXAMPLE
-    .\Write-FileHashes.ps1 -Help
+    .\Write-FileHashRecord.ps1 -Help
     Displays the help message for the function.
 
 .NOTES

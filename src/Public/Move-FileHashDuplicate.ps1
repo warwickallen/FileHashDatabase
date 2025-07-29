@@ -3,11 +3,11 @@
     Moves duplicated files identified by hash values to a staging folder.
 
 .DESCRIPTION
-    The Move-FileHashDuplicates function identifies files with identical hash values in the FileHash
-    table and moves all but one to a specified staging folder for later deletion. One file per unique
-    hash is preserved, selected based on the criterion specified by the PreserveBy parameter. The
-    function replicates the original directory structure under the destination, logs moves to the
-    MovedFile table, and provides a progress indicator.
+    The Move-FileHashDuplicate function identifies files with identical hash values in the FileHash
+    table and moves all but one to a specified staging folder for later deletion. One file per
+    unique hash is preserved, selected based on the criterion specified by the PreserveBy parameter.
+    The function replicates the original directory structure under the destination, logs moves to
+    the MovedFile table, and provides a progress indicator.
 
 .PARAMETER Destination
     The directory where duplicated files are moved. Must be a valid, absolute path.
@@ -20,7 +20,8 @@
 
 .PARAMETER Filter
     Conditions to filter duplicates. Can be:
-    - An array of strings applied to the aggregated result (HAVING clause), e.g., @("FileCount > 2").
+    - An array of strings applied to the aggregated result (HAVING clause), e.g.,
+        @("FileCount > 2").
     - A hashtable with keys:
         - 'individual': Conditions on FileHash table rows (e.g., @("FilePath LIKE 'C:%'")).
         - 'aggregated': Conditions on grouped results (e.g., @("FileCount > 2")).
@@ -30,7 +31,7 @@
 
 .PARAMETER PreserveBy
     Criterion for selecting which file to preserve for each unique hash. Options are:
-    - EarliestProcessed: The file first processed by Write-FileHashes.
+    - EarliestProcessed: The file first processed by Write-FileHashRecord.
     - LongestName:       The file with the longest file name.
     - LongestPath:       The file with the longest full path.
     - ShortestPath:      The file with the shortest full path.
@@ -39,8 +40,8 @@
 .PARAMETER OrderBy
     Criterion for determining the order in which to move the files. Options are:
     - FilePaths:      The concatenated list of the duplicate files' full paths.
-    - MaxProcessedAt: The time when the last file was processed by Write-FileHashes.
-    - MinProcessedAt: The time when the first file was processed by Write-FileHashes.
+    - MaxProcessedAt: The time when the last file was processed by Write-FileHashRecord.
+    - MinProcessedAt: The time when the first file was processed by Write-FileHashRecord.
     Default: FilePaths
 
 .PARAMETER OrderDirection
@@ -68,7 +69,7 @@
     Displays this help message and exits.
 
 .EXAMPLE
-    Move-FileHashDuplicates -Destination "C:\Staging" -WhatIf
+    Move-FileHashDuplicate -Destination "C:\Staging" -WhatIf
     Simulates moving duplicated files to "C:\Staging" without making changes.
 
 .EXAMPLE
@@ -77,7 +78,7 @@
         DatabasePath = "C:\Custom\FileHashes.db"
         Algorithm = "MD5"
     }
-    Move-FileHashDuplicates @params
+    Move-FileHashDuplicate @params
     Moves duplicated files identified by MD5 hashes to "D:\Duplicates" using a custom database.
 
 .EXAMPLE
@@ -89,7 +90,7 @@
         }
         PreserveBy = "EarliestProcessed"
     }
-    Move-FileHashDuplicates @params
+    Move-FileHashDuplicate @params
     Moves duplicated files, such that:
     - the only files moved have:
         - SHA256 hashes,
@@ -101,8 +102,8 @@
 .NOTES
     Requires the PSSQLite module. Defaults are set in FileHashDatabase.psm1.
 
-    All database operations are performed securely via the FileHashDatabase class using parameterized
-    queries.
+    All database operations are performed securely via the FileHashDatabase class using
+    parameterised queries.
 #>
 
 function Convert-FilterToParameter {
@@ -130,7 +131,8 @@ function Convert-FilterToParameter {
                 $paramValue = $matches[1]
                 if ($column -eq 'a.AlgorithmName' -or $column -eq 'Algorithm') {
                     if ($paramValue -notin $supportedAlgorithms) {
-                        throw "Invalid algorithm in filter: '$paramValue'. Must be one of: $supportedAlgorithms"
+                        throw("Invalid algorithm in filter: '$paramValue'. " +
+                              "Must be one of: $supportedAlgorithms")
                     }
                 }
             } elseif ($value -match '^\d+$') {
@@ -240,7 +242,8 @@ function Move-FileHashDuplicate {
             $validKeys = 'individual', 'aggregated'
             foreach ($key in $filters.Keys) {
                 if ($key -notin $validKeys) {
-                    throw "Invalid filter key: $key. Allowed keys are 'individual' and 'aggregated'."
+                    throw("Invalid filter key: $key. " +
+                          "Allowed keys are 'individual' and 'aggregated'.")
                 }
             }
         } else {
@@ -364,17 +367,26 @@ $(if (-not $Reprocess) { " AND mf.SourcePath IS NULL" })
                     }
                 }
             } catch {
-                Write-Error "Failed to retrieve files for hash '$($group.Hash)': $_" -ErrorAction $errorAction
+                Write-Error "Failed to retrieve files for hash '$($group.Hash)': $_" `
+                  -ErrorAction $errorAction
                 continue
             }
 
             if ($files.Count -le 1) { continue }
 
             $preserveFile = switch ($PreserveBy) {
-                'EarliestProcessed' { $files | Sort-Object ProcessedAt | Select-Object -First 1 }
-                'LongestPath'       { $files | Sort-Object PathLength -Descending | Select-Object -First 1 }
-                'ShortestPath'      { $files | Sort-Object PathLength | Select-Object -First 1 }
-                'LongestName'       { $files | Sort-Object NameLength -Descending | Select-Object -First 1 }
+                'EarliestProcessed' {
+                    $files | Sort-Object ProcessedAt | Select-Object -First 1
+                }
+                'LongestPath'       {
+                    $files | Sort-Object PathLength -Descending | Select-Object -First 1
+                }
+                'ShortestPath'      {
+                    $files | Sort-Object PathLength | Select-Object -First 1
+                }
+                'LongestName'       {
+                    $files | Sort-Object NameLength -Descending | Select-Object -First 1
+                }
             }
             "Preserving file: $($preserveFile.FilePath)" | Write-Verbose
 
@@ -391,7 +403,8 @@ $(if (-not $Reprocess) { " AND mf.SourcePath IS NULL" })
                 $movedOrCopied   = if ($CopyMode) { 'Copied'  } else { 'Moved'  }
                 $movingOrCopying = if ($CopyMode) { 'Copying' } else { 'Moving' }
 
-                $destPath = Get-DestinationPath -SourcePath $file.FilePath -DestinationRoot $Destination
+                $destPath = Get-DestinationPath -SourcePath $file.FilePath `
+                                                -DestinationRoot $Destination
                 "$movingOrCopying '$($file.FilePath)' to '$destPath'" | Write-Verbose
 
                 $fileName = [System.IO.Path]::GetFileName($file.FilePath)
@@ -416,7 +429,8 @@ $(if (-not $Reprocess) { " AND mf.SourcePath IS NULL" })
                         } else {
                             Move-Item @params
                         }
-                        $db.LogMovedFile($group.Hash, $Algorithm, $file.FilePath, $destPath, (Get-Date))
+                        $db.LogMovedFile($group.Hash, $Algorithm, $file.FilePath, $destPath,
+                                         (Get-Date))
                         for ($i = $ndots; $i -gt 0; $i--) {
                             Start-Sleep -Milliseconds $interdotPauseMs
                             Write-Host -NoNewline "`b `b"

@@ -10,7 +10,7 @@
     It demonstrates the proper way to handle newlines in PowerShell commit messages.
 #>
 
-Write-Host "Testing newline handling in commit messages..." -ForegroundColor Green
+Write-Output "Testing newline handling in commit messages..."
 
 # Test message with newlines
 $header = "test: verify newline handling"
@@ -24,9 +24,9 @@ stay within the 72-character limit.
 This demonstrates proper newline handling in PowerShell.
 "@
 
-Write-Host "Header: $header" -ForegroundColor Cyan
-Write-Host "Body:" -ForegroundColor Cyan
-Write-Host $body -ForegroundColor White
+Write-Output "Header: $header"
+Write-Output "Body:"
+Write-Output $body
 
 # Create a temporary file for the commit message
 $tempFile = [System.IO.Path]::GetTempFileName()
@@ -39,16 +39,16 @@ $body
 "@
     Set-Content -Path $tempFile -Value $commitMessage -Encoding UTF8
 
-    Write-Host "`nCommit message written to: $tempFile" -ForegroundColor Yellow
-    Write-Host "Content preview:" -ForegroundColor Yellow
-    Get-Content $tempFile | ForEach-Object { Write-Host "  $_" -ForegroundColor Gray }
+    Write-Output "`nCommit message written to: $tempFile"
+    Write-Output "Content preview:"
+    Get-Content $tempFile | ForEach-Object { Write-Output "  $_" }
 
-    Write-Host "`nTo test the commit, run:" -ForegroundColor Green
-    Write-Host "git commit -F `"$tempFile`"" -ForegroundColor Cyan
+    Write-Output "`nTo test the commit, run:"
+    Write-Output "git commit -F `"$tempFile`""
 
 } catch {
     Write-Error "Error creating test commit message: $_"
 } finally {
     # Note: We don't delete the temp file here so you can inspect it
-    Write-Host "`nTemporary file preserved for inspection: $tempFile" -ForegroundColor Yellow
+    Write-Output "`nTemporary file preserved for inspection: $tempFile"
 }

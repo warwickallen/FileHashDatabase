@@ -98,7 +98,7 @@ Describe "End-to-End Integration Tests" -Tag "Integration", "E2E" {
                 # Check if FileHash table exists (not FileHashes)
                 $tables = Invoke-SqliteQuery -DataSource $script:testDbPath -Query "SELECT name FROM sqlite_master WHERE type='table'"
                 $tableNames = $tables.name
-                Write-Host "Available tables: $($tableNames -join ', ')"
+                Write-Output "Available tables: $($tableNames -join ', ')"
 
                 # Your actual schema might use different table names - adjust as needed
                 $tableNames.Count | Should -BeGreaterThan 0

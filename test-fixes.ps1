@@ -1,44 +1,43 @@
 # Test script to verify fixes
-Write-Host "Testing FileHashDatabase module fixes..." -ForegroundColor Green
+Write-Output "Testing FileHashDatabase module fixes..."
 
 # Test 1: Check if module can be imported
 try {
     Import-Module ./src/FileHashDatabase.psd1 -Force -ErrorAction Stop
-    Write-Host "✓ Module imported successfully" -ForegroundColor Green
+    Write-Output "[OK] Module imported successfully"
 } catch {
-    Write-Host "✗ Module import failed: $($_.Exception.Message)" -ForegroundColor Red
+    Write-Output "[KO] Module import failed: $($_.Exception.Message)"
     exit 1
 }
 
 # Test 2: Check exported functions
 $functions = Get-Command -Module FileHashDatabase
-Write-Host "✓ Found $($functions.Count) exported functions: $($functions.Name -join ', ')" -ForegroundColor Green
-
+Write-Output "[OK] Found $($functions.Count) exported functions: $($functions.Name -join ', ')"
 # Test 3: Check for Invoke-Expression usage (should be fixed)
 $invokeExpressionFound = Get-ChildItem -Path ./src -Recurse -Filter "*.ps1" |
     Select-String -Pattern "Invoke-Expression" -Quiet
 if ($invokeExpressionFound) {
-    Write-Host "✗ Invoke-Expression still found in code" -ForegroundColor Red
+    Write-Output "[KO] Invoke-Expression still found in code"
 } else {
-    Write-Host "✓ Invoke-Expression usage fixed" -ForegroundColor Green
+    Write-Output "[OK] Invoke-Expression usage fixed"
 }
 
 # Test 4: Check for unused variable (should be fixed)
 $unusedVariableFound = Get-ChildItem -Path ./src -Recurse -Filter "*.ps1" |
-    Select-String -Pattern "\$fileName\s*=" -Quiet
+    Select-String -Pattern '\$fileName\s*=' -Quiet
 if ($unusedVariableFound) {
-    Write-Host "✗ Unused variable \$fileName still found" -ForegroundColor Red
+    Write-Output '[KO] Unused variable "\$fileName" still found'
 } else {
-    Write-Host "✓ Unused variable \$fileName fixed" -ForegroundColor Green
+    Write-Output '[OK] Unused variable "\$fileName" fixed'
 }
 
 # Test 5: Check for unapproved verb (should be fixed)
 $unapprovedVerbFound = Get-ChildItem -Path ./src -Recurse -Filter "*.ps1" |
     Select-String -Pattern "function Parameterize-Filter" -Quiet
 if ($unapprovedVerbFound) {
-    Write-Host "✗ Unapproved verb 'Parameterize' still found" -ForegroundColor Red
+    Write-Output "[KO] Unapproved verb 'Parameterize' still found"
 } else {
-    Write-Host "✓ Unapproved verb 'Parameterize' fixed" -ForegroundColor Green
+    Write-Output "[OK] Unapproved verb 'Parameterize' fixed"
 }
 
-Write-Host "`nTest completed!" -ForegroundColor Green
+Write-Output "`nTest completed!"

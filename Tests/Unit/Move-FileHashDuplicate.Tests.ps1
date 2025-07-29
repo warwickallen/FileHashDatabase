@@ -4,7 +4,7 @@ BeforeAll {
     # Determine module path with better error handling
     if ($env:TEST_MODULE_PATH -and (Test-Path $env:TEST_MODULE_PATH)) {
         $manifestPath = $env:TEST_MODULE_PATH
-        Write-Host "Using TEST_MODULE_PATH: $manifestPath"
+        Write-Output "Using TEST_MODULE_PATH: $manifestPath"
     } else {
         # Fallback logic with multiple possible locations
         $possiblePaths = @(
@@ -19,7 +19,7 @@ BeforeAll {
         foreach ($path in $possiblePaths) {
             if (Test-Path $path) {
                 $manifestPath = $path
-                Write-Host "Found module manifest at: $manifestPath"
+                Write-Output "Found module manifest at: $manifestPath"
                 break
             }
         }
@@ -31,10 +31,10 @@ BeforeAll {
 
     # Import the module with comprehensive error handling
     try {
-        Write-Host "Testing module manifest: $manifestPath"
+        Write-Output "Testing module manifest: $manifestPath"
         $null = Test-ModuleManifest -Path $manifestPath -ErrorAction Stop
 
-        Write-Host "Importing module: $manifestPath"
+        Write-Output "Importing module: $manifestPath"
         Import-Module -Name $manifestPath -Force -ErrorAction Stop -Verbose:$false
 
         $module = Get-Module -Name FileHashDatabase
@@ -42,11 +42,11 @@ BeforeAll {
             throw "Module FileHashDatabase was not imported successfully"
         }
 
-        Write-Host "Successfully imported module: $($module.Name) version $($module.Version)"
+        Write-Output "Successfully imported module: $($module.Name) version $($module.Version)"
 
         # Check exported functions
         $exportedCommands = Get-Command -Module FileHashDatabase -ErrorAction SilentlyContinue
-        Write-Host "Exported commands: $($exportedCommands.Name -join ', ')"
+        Write-Output "Exported commands: $($exportedCommands.Name -join ', ')"
 
     } catch {
         Write-Error "Failed to import FileHashDatabase module: $_"
@@ -59,7 +59,7 @@ BeforeAll {
         if ($psSQLiteModule) {
             Import-Module PSSQLite -Force -ErrorAction SilentlyContinue
             $script:SkipSQLiteTests = $false
-            Write-Host "PSSQLite is available"
+            Write-Output "PSSQLite is available"
         } else {
             Write-Warning "PSSQLite module not available - SQLite tests will be skipped"
             $script:SkipSQLiteTests = $true
@@ -85,7 +85,7 @@ BeforeAll {
                 $testDb = $null
             }
         } catch {
-            Write-Host "Direct class instantiation failed: $($_.Exception.Message)"
+            Write-Output "Direct class instantiation failed: $($_.Exception.Message)"
         }
 
         if (-not $classAvailable) {
@@ -97,7 +97,7 @@ BeforeAll {
                     $testDb = $null
                 }
             } catch {
-                Write-Host "New-Object instantiation failed: $($_.Exception.Message)"
+                Write-Output "New-Object instantiation failed: $($_.Exception.Message)"
             }
         }
 
@@ -107,7 +107,7 @@ BeforeAll {
         }
 
         if ($classAvailable) {
-            Write-Host "FileHashDatabase class is available"
+            Write-Output "FileHashDatabase class is available"
             $script:SkipClassTests = $false
         } else {
             Write-Warning "FileHashDatabase class is not accessible - class-dependent tests will be skipped"
@@ -130,12 +130,12 @@ BeforeAll {
         $script:TempDir = "/tmp"
     }
 
-    Write-Host "Test environment configured:"
-    Write-Host "  TestDrive: $script:TestDrive"
-    Write-Host "  StagingDir: $script:StagingDir"
-    Write-Host "  TempDir: $script:TempDir"
-    Write-Host "  SkipSQLiteTests: $script:SkipSQLiteTests"
-    Write-Host "  SkipClassTests: $script:SkipClassTests"
+    Write-Output "Test environment configured:"
+    Write-Output "  TestDrive: $script:TestDrive"
+    Write-Output "  StagingDir: $script:StagingDir"
+    Write-Output "  TempDir: $script:TempDir"
+    Write-Output "  SkipSQLiteTests: $script:SkipSQLiteTests"
+    Write-Output "  SkipClassTests: $script:SkipClassTests"
 }
 
 Describe "Module Basic Tests" {
@@ -192,7 +192,7 @@ Describe "Class-Dependent Tests" -Skip:$script:SkipClassTests {
 
         # Set up temporary database
         $script:dbPath = Join-Path $script:TempDir "TestFileHashes_$(Get-Random).db"
-        Write-Host "Creating temporary database at: $script:dbPath"
+        Write-Output "Creating temporary database at: $script:dbPath"
 
         try {
             $script:db = [FileHashDatabase]::new($script:dbPath)
@@ -205,7 +205,7 @@ Describe "Class-Dependent Tests" -Skip:$script:SkipClassTests {
 
     AfterAll {
         if ($script:dbPath -and (Test-Path -Path $script:dbPath)) {
-            Write-Host "Removing temporary database: $script:dbPath"
+            Write-Output "Removing temporary database: $script:dbPath"
             Remove-Item -Path $script:dbPath -Force -ErrorAction SilentlyContinue
         }
     }
@@ -258,20 +258,19 @@ Describe "Integration Tests" -Skip:$script:SkipSQLiteTests {
             }
 
             # Test with WhatIf to avoid actual file operations
-            $result = $null
             $errorOccurred = $false
 
             try {
                 Move-FileHashDuplicate -DatabasePath $tempDbPath -Destination $script:StagingDir -Algorithm 'SHA256' -WhatIf -ErrorAction Stop
-                Write-Host "✅ Function call succeeded (WhatIf mode)"
+                Write-Output "[OK] Function call succeeded (WhatIf mode)"
             } catch {
                 $errorOccurred = $true
                 $errorMessage = $_.Exception.Message
-                Write-Host "Function call result: $errorMessage"
+                Write-Output "[KO] Function call result: $errorMessage"
 
                 # Some specific error messages indicate the function is working correctly
                 if ($errorMessage -like "*database*" -or $errorMessage -like "*PSSQLite*" -or $errorMessage -like "*No duplicate files found*") {
-                    Write-Host "✅ Function appears to be working (expected error for empty database)"
+                    Write-Output "[OK] Function appears to be working (expected error for empty database)"
                     $errorOccurred = $false
                 }
             }
@@ -301,6 +300,6 @@ Describe "Cross-Platform Compatibility" {
 
     It "Should detect PowerShell version correctly" {
         $PSVersionTable.PSVersion | Should -Not -BeNullOrEmpty
-        Write-Host "Running on PowerShell version: $($PSVersionTable.PSVersion)"
+        Write-Output "Running on PowerShell version: $($PSVersionTable.PSVersion)"
     }
 }

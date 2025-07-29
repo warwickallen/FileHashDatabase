@@ -65,7 +65,7 @@ $header = if ($Scope) {
 # Validate header length
 if ($header.Length -gt 50) {
     Write-Error "Header is too long ($($header.Length) characters). Maximum is 50 characters."
-    Write-Host "Current header: $header"
+    Write-Output "Current header: $header"
     exit 1
 }
 
@@ -80,24 +80,24 @@ if ($Body) {
 }
 
 # Show what will be committed
-Write-Host "Staged files:" -ForegroundColor Green
+Write-Output "Staged files:"
 git status --porcelain | Where-Object { $_.StartsWith('A ') -or $_.StartsWith('M ') -or $_.StartsWith('D ') } | ForEach-Object {
     $status = $_.Substring(0, 2).Trim()
     $file = $_.Substring(3)
-    Write-Host "  $status $file" -ForegroundColor Yellow
+    Write-Output "  $status $file"
 }
 
-Write-Host "`nCommit message:" -ForegroundColor Green
-Write-Host "Header: $header" -ForegroundColor Cyan
+Write-Output "`nCommit message:"
+Write-Output "Header: $header"
 if ($Body) {
-    Write-Host "Body:" -ForegroundColor Cyan
-    Write-Host $Body -ForegroundColor White
+    Write-Output "Body:"
+    Write-Output $Body
 }
 
 # Confirm commit
 $confirm = Read-Host "`nProceed with commit? (y/N)"
 if ($confirm -ne 'y' -and $confirm -ne 'Y') {
-    Write-Host "Commit cancelled." -ForegroundColor Yellow
+    Write-Output "Commit cancelled."
     exit 0
 }
 
@@ -129,9 +129,9 @@ $Body
     }
 
     if ($LASTEXITCODE -eq 0) {
-        Write-Host "`nCommit successful!" -ForegroundColor Green
+        Write-Output "`nCommit successful!"
         $commitHash = git rev-parse HEAD
-        Write-Host "Commit hash: $commitHash" -ForegroundColor Cyan
+        Write-Output "Commit hash: $commitHash"
     } else {
         Write-Error "Commit failed."
         exit 1

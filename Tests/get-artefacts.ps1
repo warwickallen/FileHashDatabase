@@ -6,7 +6,7 @@ param(
 )
 
 if ([string]::IsNullOrEmpty($RunId)) {
-    Write-Host "No run ID provided, searching for highest run folder in Tests/Artefacts"
+    Write-Output "No run ID provided, searching for highest run folder in Tests/Artefacts"
     $artefactsRoot = Join-Path $repoDir "Tests\Artefacts"
     $runFolders = Get-ChildItem -Path $artefactsRoot -Directory -Filter 'run-*' | Where-Object { $_.Name -match '^run-\\d+$' }
     if ($runFolders.Count -eq 0) {
@@ -14,7 +14,7 @@ if ([string]::IsNullOrEmpty($RunId)) {
     }
     $highestRunFolder = $runFolders | Sort-Object { [int]($_.Name -replace '^run-', '') } -Descending | Select-Object -First 1
     $RunId = $highestRunFolder.Name -replace '^run-', ''
-    Write-Host "Using highest run folder: $($highestRunFolder.Name) (RunId: $RunId)"
+    Write-Output "Using highest run folder: $($highestRunFolder.Name) (RunId: $RunId)"
 }
 
 $artefacts = @(
@@ -36,8 +36,8 @@ $artefactsDir = Join-Path $repoDir "Tests\Artefacts\run-$RunId"
 New-Item -ItemType Directory -Path $artefactsDir -Force | Out-Null
 
 foreach ($artefact in $artefacts) {
-    Write-Host "Retrieving artefact: $artefact"
+    Write-Output "Retrieving artefact: $artefact"
     gh run download $RunId --name $artefact --dir $artefactsDir
 }
 
-Write-Host "Artefacts downloaded to: $artefactsDir"
+Write-Output "Artefacts downloaded to: $artefactsDir"

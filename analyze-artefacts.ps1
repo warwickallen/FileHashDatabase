@@ -29,25 +29,32 @@ Write-Output "=== FileHashDatabase Artefacts Analysis ==="
 Write-Output "Analysing run: $($latestRunFolder.Name) (RunId: $runId)"
 Write-Output ""
 
+# Initialize variables for overall assessment
+$script:totalTests = 0
+$script:errors = 0
+$script:failures = 0
+$script:successful = 0
+$script:totalIssues = 0
+
 # Analyse unit test results
-$testResultsPath = Join-Path $latestRunFolder.FullName "quick-validation-results/unit-test-results.xml"
+$testResultsPath = Join-Path $latestRunFolder.FullName "unit-test-results.xml"
 if (Test-Path $testResultsPath) {
     Write-Output "=== Unit Test Results ==="
     $testResults = [xml](Get-Content $testResultsPath)
 
-    $totalTests = [int]$testResults.'test-results'.total
-    $errors = [int]$testResults.'test-results'.errors
-    $failures = [int]$testResults.'test-results'.failures
-    $successful = $totalTests - $errors - $failures
+    $script:totalTests = [int]$testResults.'test-results'.total
+    $script:errors = [int]$testResults.'test-results'.errors
+    $script:failures = [int]$testResults.'test-results'.failures
+    $script:successful = $script:totalTests - $script:errors - $script:failures
 
-    Write-Output "Total Tests: $totalTests"
-    Write-Output "Successful: $successful"
-    Write-Output "Errors: $errors"
-    Write-Output "Failures: $failures"
-    Write-Output "Success Rate: $([math]::Round(($successful / $totalTests) * 100, 1))%"
+    Write-Output "Total Tests: $($script:totalTests)"
+    Write-Output "Successful: $($script:successful)"
+    Write-Output "Errors: $($script:errors)"
+    Write-Output "Failures: $($script:failures)"
+    Write-Output "Success Rate: $([math]::Round(($script:successful / $script:totalTests) * 100, 1))%"
     Write-Output ""
 
-    if ($errors -gt 0 -or $failures -gt 0) {
+    if ($script:errors -gt 0 -or $script:failures -gt 0) {
         Write-Output "[FAILED] Test failures detected!"
     } else {
         Write-Output "[PASSED] All tests passed successfully!"
@@ -56,7 +63,7 @@ if (Test-Path $testResultsPath) {
 }
 
 # Analyse PSScriptAnalyzer results
-$analyzerResultsPath = Join-Path $latestRunFolder.FullName "quick-validation-results/analyzer-results.xml"
+$analyzerResultsPath = Join-Path $latestRunFolder.FullName "analyzer-results.xml"
 if (Test-Path $analyzerResultsPath) {
     Write-Output "=== Code Analysis Results ==="
 
@@ -77,7 +84,7 @@ if (Test-Path $analyzerResultsPath) {
 
     # Read the XML content and extract issues, respecting settings
     $xmlContent = Get-Content $analyzerResultsPath -Raw
-    $totalIssues = 0
+    $script:totalIssues = 0
     $issues = @()
 
     # Check for Write-Host usage only if the rule is enabled
@@ -89,7 +96,7 @@ if (Test-Path $analyzerResultsPath) {
             Line = "314"
             Message = "File 'Write-FileHashRecord.ps1' uses Write-Host. Avoid using Write-Host because it might not work in all hosts, does not work when there is no host, and (prior to PS 5.0) cannot be suppressed, captured, or redirected. Instead, use Write-Output, Write-Verbose, or Write-Information."
         }
-        $totalIssues++
+        $script:totalIssues++
     }
 
     # Check for null comparison issues
@@ -102,11 +109,11 @@ if (Test-Path $analyzerResultsPath) {
             Count = $nullComparisonCount
             Message = "Found $nullComparisonCount null comparison warnings. Use `$null -eq pattern for safe null comparisons."
         }
-        $totalIssues += $nullComparisonCount
+        $script:totalIssues += $nullComparisonCount
     }
 
-    if ($totalIssues -gt 0) {
-        Write-Output "Found $totalIssues code analysis issue(s):"
+    if ($script:totalIssues -gt 0) {
+        Write-Output "Found $($script:totalIssues) code analysis issue(s):"
         Write-Output ""
         foreach ($issue in $issues) {
             Write-Output "[$($issue.Type)] $($issue.Rule)"
@@ -122,7 +129,7 @@ if (Test-Path $analyzerResultsPath) {
             Write-Output "   Message: $($issue.Message)"
             Write-Output ""
         }
-        Write-Output "Summary: 0 Error(s), $totalIssues Warning(s), 0 Info"
+        Write-Output "Summary: 0 Error(s), $($script:totalIssues) Warning(s), 0 Info"
     } else {
         Write-Output "[PASSED] No code analysis issues found!"
     }
@@ -131,8 +138,8 @@ if (Test-Path $analyzerResultsPath) {
 
 # Overall assessment
 Write-Output "=== Overall Assessment ==="
-$testSuccess = if ($errors -eq 0 -and $failures -eq 0) { $true } else { $false }
-$codeQuality = if ($totalIssues -eq 0) { $true } else { $false }
+$testSuccess = if ($script:errors -eq 0 -and $script:failures -eq 0) { $true } else { $false }
+$codeQuality = if ($script:totalIssues -eq 0) { $true } else { $false }
 
 if ($testSuccess -and $codeQuality) {
     Write-Output "[EXCELLENT] All tests passed and no code quality issues found."

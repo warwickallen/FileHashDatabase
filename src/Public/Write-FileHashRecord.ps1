@@ -5,7 +5,7 @@
 
 .DESCRIPTION
     The Write-FileHashRecord function scans a specified directory and computes file hashes using the
-    specified algorithm (default SHA256). It displays a progress indicator with dots and handles
+    specified algorithm (default SHA256). It displays a pause indicator with dots and handles
     retries for failed hash computations. The function can pause between files, retry failed
     attempts, and optionally halt on errors. File names are formatted to a specified display length
     for consistent output.
@@ -124,6 +124,10 @@
 # Load the FileHashDatabase class
 if (-not (Get-Command -Name 'FileHashDatabase' -ErrorAction SilentlyContinue)) {
     . "$PSScriptRoot\..\Private\FileHashDatabase.ps1"
+}
+# Load the PauseIndicator class
+if (-not ([System.Management.Automation.PSTypeName]'PauseIndicator').Type) {
+    . "$PSScriptRoot\..\Private\PauseIndicator.ps1"
 }
 
 function Write-FileHashRecord {
@@ -258,9 +262,7 @@ function Write-FileHashRecord {
         $file_list = Get-ChildItem @params
     }
 
-    $ndots = 64
-    $dots = '.' * $ndots
-    $interdot_pause_ms = 1e3 * $InterfilePauseSeconds / $ndots
+    $indicator = [PauseIndicator]::new($InterfilePauseSeconds)
     $error_action = 'Continue'
     if ($HaltOnFailure) {
         $error_action = 'Stop'
@@ -277,31 +279,17 @@ function Write-FileHashRecord {
 
         $fname = $f.Name
         $hash = $null
-        $len = $fname.Length
-        if ($len -lt $FileNameDisplayLength) {
-            $padding_len = $FileNameDisplayLength - $len
-            $fname = $fname + (' ' * $padding_len)
-        } elseif ($len -gt $FileNameDisplayLength) {
-            $fname = $fname.Substring(0, ($FileNameDisplayLength - 9)) +
-                '...' + $fname.Substring($len - 6)
-        }
-        $now = Get-Date
-        $timestamp = $now.ToString('yyyyMMdd-hhmmss')
-        $str = "$timestamp  $fname  $dots"
-        Write-Host -NoNewline $str
+        $indicator.Start($fname)
 
         # If NoReprocess is set, check if this file's path already exists in the database
         if ($NoReprocess -and $db) {
             if ($db.FileExistsInDatabase($f.FullName)) {
-                Write-Host "$("`b" * 30) [Skipped, already processed]"
+                $indicator.Fail("[Skipped, already processed]")
                 continue
             }
         }
 
-        for ($i = $ndots; $i; $i--) {
-            Start-Sleep -Milliseconds $interdot_pause_ms
-            Write-Host -NoNewLine "`b `b"
-        }
+        $indicator.Animate()
         $attempts_remaining = 1 + $RetryAttempts
         $this_error = $null
         while ($attempts_remaining-- -and -not $hash.Length) {
@@ -316,7 +304,7 @@ function Write-FileHashRecord {
                 Start-Sleep -Seconds $RetryDelaySeconds
             }
         }
-        Write-Host $hash
+        $indicator.Complete($hash)
         if ($this_error) {
             $msg = 'Cannot read the contents of "{0}"' -f $f.FullName
             Write-Error -Message $msg -ErrorAction $error_action
@@ -324,7 +312,7 @@ function Write-FileHashRecord {
 
         # Log to SQLite database if requested
         if (-not $NoSqliteLog -and $db) {
-            $db.LogFileHash($hash, $Algorithm, $f.FullName, $f.Length, $now)
+            $db.LogFileHash($hash, $Algorithm, $f.FullName, $f.Length, (Get-Date))
         }
 
         $processedCount++ # Increment processed file count (success or failure)

@@ -174,6 +174,48 @@ Class file location: $classModulePath
     Write-Warning "Cannot find required class file: $classModulePath"
 }
 
+# Load the PauseIndicator class
+$pauseIndicatorPath = Join-Path $privatePath 'PauseIndicator.ps1'
+
+if (Test-Path $pauseIndicatorPath) {
+    Write-Verbose "Loading PauseIndicator class from: $pauseIndicatorPath"
+
+    try {
+        # Method 1: Try Import-Module (PowerShell 5.1+)
+        Import-Module $pauseIndicatorPath -Global -Force -Verbose:$false -ErrorAction Stop
+        Write-Verbose "PauseIndicator class loaded via Import-Module"
+        $pauseIndicatorLoaded = $true
+    } catch {
+        Write-Verbose "Import-Module failed: $($_.Exception.Message)"
+        $pauseIndicatorLoaded = $false
+    }
+
+    if (-not $pauseIndicatorLoaded) {
+        try {
+            # Method 2: Fallback to dot-sourcing
+            . $pauseIndicatorPath
+
+            # Verify the class is available by trying to get its type
+            $classType = [PauseIndicator] -as [type]
+            if (-not $classType) {
+                throw "PauseIndicator class not found after dot-sourcing"
+            }
+
+            Write-Verbose "PauseIndicator class loaded via dot-sourcing"
+            $pauseIndicatorLoaded = $true
+        } catch {
+            Write-Verbose "Dot-sourcing failed: $($_.Exception.Message)"
+            $pauseIndicatorLoaded = $false
+        }
+    }
+
+    if (-not $pauseIndicatorLoaded) {
+        Write-Warning "Failed to load PauseIndicator class. Pause indicators may not work correctly."
+    }
+} else {
+    Write-Warning "Cannot find PauseIndicator class file: $pauseIndicatorPath"
+}
+
 # Load public functions with robust error handling
 $publicFunctionPath = Join-Path $script:ModuleRoot 'Public'
 

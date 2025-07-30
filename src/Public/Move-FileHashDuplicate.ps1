@@ -7,7 +7,7 @@
     table and moves all but one to a specified staging folder for later deletion. One file per
     unique hash is preserved, selected based on the criterion specified by the PreserveBy parameter.
     The function replicates the original directory structure under the destination, logs moves to
-    the MovedFile table, and provides a progress indicator.
+    the MovedFile table, and provides a pause indicator.
 
 .PARAMETER Destination
     The directory where duplicated files are moved. Must be a valid, absolute path.
@@ -54,7 +54,7 @@
     Maximum number of files to move. Defaults to the maximum integer value.
 
 .PARAMETER InterfilePauseSeconds
-    Number of seconds to pause between moving files, used for the progress indicator.
+    Number of seconds to pause between moving files, used for the pause indicator.
 
 .PARAMETER Reprocess
     If specified, moves files already recorded as moved in the MovedFile table.
@@ -105,6 +105,11 @@
     All database operations are performed securely via the FileHashDatabase class using
     parameterised queries.
 #>
+
+# Load the PauseIndicator class
+if (-not ([System.Management.Automation.PSTypeName]'PauseIndicator').Type) {
+    . "$PSScriptRoot\..\Private\PauseIndicator.ps1"
+}
 
 function Convert-FilterToParameter {
     param(
@@ -320,9 +325,6 @@ $orderByClause
 
         $processedFiles = 0
         $errorAction = if ($HaltOnFailure) { 'Stop' } else { 'Continue' }
-        $ndots = 64
-        $dots = '.' * $ndots
-        $interdotPauseMs = [math]::Round(1000 * $InterfilePauseSeconds / $ndots, 0)
     }
 
     process {
@@ -390,6 +392,7 @@ $(if (-not $Reprocess) { " AND mf.SourcePath IS NULL" })
             }
             "Preserving file: $($preserveFile.FilePath)" | Write-Verbose
 
+            $indicator = [PauseIndicator]::new($InterfilePauseSeconds)
             $toMove = $files | Where-Object { $_.FilePath -ne $preserveFile.FilePath }
 
             foreach ($file in $toMove) {
@@ -408,14 +411,7 @@ $(if (-not $Reprocess) { " AND mf.SourcePath IS NULL" })
                 "$movingOrCopying '$($file.FilePath)' to '$destPath'" | Write-Verbose
 
                 $fileName = [System.IO.Path]::GetFileName($file.FilePath)
-                $displayName = if ($fileName.Length -gt 64) {
-                    $fileName.Substring(0, 61) + "..."
-                } else {
-                    $fileName.PadRight(64)
-                }
-                $timestamp = (Get-Date).ToString('yyyyMMdd-HHmmss')
-                Write-Host -NoNewline "$timestamp $displayName $dots"
-
+                $indicator.Start($fileName)
                 try {
                     if ($PSCmdlet.ShouldProcess($file.FilePath, "$moveOrCopy to $destPath")) {
                         $params = @{
@@ -431,18 +427,14 @@ $(if (-not $Reprocess) { " AND mf.SourcePath IS NULL" })
                         }
                         $db.LogMovedFile($group.Hash, $Algorithm, $file.FilePath, $destPath,
                                          (Get-Date))
-                        for ($i = $ndots; $i -gt 0; $i--) {
-                            Start-Sleep -Milliseconds $interdotPauseMs
-                            Write-Host -NoNewline "`b `b"
-                        }
-                        Write-Host "[$movedOrCopied to $destPath]"
+                        $indicator.Animate()
+                        $indicator.Complete("[$movedOrCopied to $destPath]")
                     }
                 } catch {
                     "Failed to $($moveOrCopy.ToLower()) '$($file.FilePath)' to '$destPath': $_" |
                         Write-Error -ErrorAction $errorAction
                     $db.LogMovedFile($group.Hash, $Algorithm, $file.FilePath, $null, (Get-Date))
-                    for ($i = $ndots; $i -gt 0; $i--) { Write-Host -NoNewline "`b `b" }
-                    Write-Host "[Failed]"
+                    $indicator.Fail("[Failed]")
                 }
                 $processedFiles++
             }

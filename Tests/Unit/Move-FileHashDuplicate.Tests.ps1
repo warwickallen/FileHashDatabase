@@ -181,7 +181,8 @@ Describe "Function Parameter Validation" {
 
         It "Should handle WhatIf parameter" {
             # This should not throw an exception
-            { Move-FileHashDuplicate -DatabasePath "test.db" -Destination $script:StagingDir -Algorithm 'SHA256' -WhatIf } | Should -Not -Throw
+            $tempDbPath = Join-Path $script:TempDir "WhatIfTest_$(Get-Random).db"
+            { Move-FileHashDuplicate -DatabasePath $tempDbPath -Destination $script:StagingDir -Algorithm 'SHA256' -WhatIf } | Should -Not -Throw
         }
     }
 }

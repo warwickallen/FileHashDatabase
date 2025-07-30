@@ -31,8 +31,7 @@
     A glob-style filter. If defined, only files match the filter was be considered.
 
 .PARAMETER InterfilePauseSeconds
-    The number of seconds to pause between processing files. Must be a non-negative number. The
-    default is 20 seconds.
+    The number of seconds to pause between processing files. Must be a non-negative number.
 
 .PARAMETER RetryAttempts
     The number of retry attempts for computing a file's hash if it fails. Must be a non-negative
@@ -222,8 +221,19 @@ function Write-FileHashRecord {
     $db = $null
     if (-not $NoSqliteLog -or $NoReprocess -or $ReprocessFailed) {
         try {
+            Write-Debug "Write-FileHashRecord initialising database with path: $DatabasePath"
+            # Load the class if not already available
+            if (-not ([System.Management.Automation.PSTypeName]'FileHashDatabase').Type) {
+                Write-Debug "Loading FileHashDatabase class"
+                $classPath = Join-Path $PSScriptRoot "..\Private\FileHashDatabase.ps1"
+                . $classPath
+            }
+
+            Write-Debug "Creating FileHashDatabase instance"
             $db = [FileHashDatabase]::new($DatabasePath)
+            Write-Debug "Database instance created successfully"
         } catch {
+            Write-Debug "Failed to initialise database object: $_"
             throw "Failed to initialise database object: $_"
         }
     }
@@ -295,7 +305,8 @@ function Write-FileHashRecord {
         while ($attempts_remaining-- -and -not $hash.Length) {
             try {
                 $h = Get-FileHash -Path $f.FullName -Algorithm $Algorithm -ErrorAction Stop
-                $hash = $h.Hash.ToString()
+                $hash = $h.Hash.ToString().ToUpper()
+                Write-Debug "Computed hash for $($f.FullName): $hash (Algorithm: $Algorithm)"
             } catch {
                 $this_error = $_
                 $n = $RetryAttempts - $attempts_remaining
@@ -312,7 +323,17 @@ function Write-FileHashRecord {
 
         # Log to SQLite database if requested
         if (-not $NoSqliteLog -and $db) {
-            $db.LogFileHash($hash, $Algorithm, $f.FullName, $f.Length, (Get-Date))
+            try {
+                Write-Debug "Logging file hash to database: $($f.FullName)"
+                $db.LogFileHash($hash, $Algorithm, $f.FullName, $f.Length, (Get-Date))
+                Write-Debug "File hash logged successfully"
+            } catch {
+                Write-Debug "Failed to log file hash to database: $_"
+                Write-Error "Failed to log file hash to database: $_"
+                if ($HaltOnFailure) {
+                    throw
+                }
+            }
         }
 
         $processedCount++ # Increment processed file count (success or failure)

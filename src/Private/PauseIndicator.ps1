@@ -14,7 +14,7 @@
     The number of dots to display. Default is 64.
 
 .PARAMETER TotalSeconds
-    The total time in seconds over which the dots will be animated. Default is 20.
+    The total time in seconds over which the dots will be animated.
 
 .EXAMPLE
     $indicator = [PauseIndicator]::new(10)
@@ -57,13 +57,18 @@ class PauseIndicator {
         } else {
             $Message.PadRight($str_width)
         }
-        Write-Host -NoNewline "$timestamp $str $($this.Dots)"
+        Write-Host -NoNewline "$timestamp $str "
+        if ($this.TotalSeconds -gt 0) {
+            Write-Host -NoNewline $this.Dots
+        }
     }
 
     [void]Animate() {
-        for ($i = $this.DotCount; $i -gt 0; $i--) {
-            Start-Sleep -Milliseconds $this.InterdotPauseMs
-            Write-Host -NoNewline "`b `b"
+        if ($this.TotalSeconds -gt 0) {
+            for ($i = $this.DotCount; $i -gt 0; $i--) {
+                Start-Sleep -Milliseconds $this.InterdotPauseMs
+                Write-Host -NoNewline "`b `b"
+            }
         }
     }
 

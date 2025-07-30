@@ -97,24 +97,36 @@ function Get-FileHashRecord {
     # Handle database logic via the FileHashDatabase class
     $db = $null
     try {
+        # Load the class if not already available
+        if (-not ([System.Management.Automation.PSTypeName]'FileHashDatabase').Type) {
+            $classPath = Join-Path $PSScriptRoot "..\Private\FileHashDatabase.ps1"
+            . $classPath
+        }
+
         $db = [FileHashDatabase]::new($DatabasePath)
     } catch {
         throw "Failed to initialise database object: $_"
     }
 
     try {
+        Write-Debug "Get-FileHashRecord calling db.GetFileHashes with Limit: $Limit, Filter: $($Filter -join ', ')"
         $results = $db.GetFileHashes($Limit, $Filter)
+        Write-Debug "GetFileHashes returned $($results.Count) results"
+        Write-Debug "Raw results: $($results | ConvertTo-Json -Depth 3)"
     } catch {
+        Write-Debug "GetFileHashes failed: $_"
         throw "Failed to retrieve file hash records: $_"
     }
     try {
+        Write-Debug "Transforming $($results.Count) result rows"
         # Transform the result rows
         $toDateTime = {
             param($unix_ms)
             ([DateTimeOffset]::FromUnixTimeMilliseconds($unix_ms)).DateTime
         };
         $transformedResults = foreach ($row in $results) {
-            [PSCustomObject]@{
+            Write-Debug "Transforming row: $($row | ConvertTo-Json -Depth 3)"
+            $transformed = [PSCustomObject]@{
                 Hash = @{
                     Hash      = $row.Hash
                     Algorithm = $row.Algorithm
@@ -125,7 +137,19 @@ function Get-FileHashRecord {
                 FirstProcessed = &$toDateTime $row.MinProcessedAt
                 LastProcessed  = &$toDateTime $row.MaxProcessedAt
             }
+            Write-Debug "Transformed to: $($transformed | ConvertTo-Json -Depth 3)"
+            $transformed
         }
+        Write-Debug "Returning $($transformedResults.Count) transformed results"
+
+        # Add debugging for duplicate detection
+        Write-Debug "Analyzing results for duplicate detection"
+        $duplicateGroups = $transformedResults | Where-Object { $_.Count -gt 1 }
+        Write-Debug "Found $($duplicateGroups.Count) groups with duplicates"
+        foreach ($group in $duplicateGroups) {
+            Write-Debug "Duplicate group - Hash: $($group.Hash.Hash), Algorithm: $($group.Hash.Algorithm), Count: $($group.Count), Paths: $($group.Paths -join ', ')"
+        }
+
         return $transformedResults
     } catch {
         throw "Failed to transform file hash records: $_"

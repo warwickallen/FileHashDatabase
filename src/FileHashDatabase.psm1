@@ -5,7 +5,7 @@ $script:Config = @{
         DatabasePath = [System.IO.Path]::Combine($env:APPDATA, "FileHashDatabase", "FileHashes.db")
         Algorithm             = 'SHA256'
         FileNameDisplayLength =              64
-        InterfilePauseSeconds =               1
+        InterfilePauseSeconds =               0
         MaxFiles              = [int]::MaxValue
         OrderBy               = 'FilePaths'
         OrderDirection        = 'Ascending'
@@ -96,30 +96,30 @@ if (Test-Path $classModulePath) {
     Write-Verbose "Loading FileHashDatabase class from: $classModulePath"
 
     try {
-        # Method 1: Try Import-Module (PowerShell 5.1+)
-        Import-Module $classModulePath -Global -Force -Verbose:$false -ErrorAction Stop
-        Write-Verbose "FileHashDatabase class loaded via Import-Module"
+        # Method 1: Try dot-sourcing (most reliable for classes)
+        . $classModulePath
+
+        # Verify the class is available by trying to get its type
+        $classType = [FileHashDatabase] -as [type]
+        if (-not $classType) {
+            throw "FileHashDatabase class not found after dot-sourcing"
+        }
+
+        Write-Verbose "FileHashDatabase class loaded via dot-sourcing"
         $classLoaded = $true
     } catch {
-        Write-Verbose "Import-Module failed: $($_.Exception.Message)"
+        Write-Verbose "Dot-sourcing failed: $($_.Exception.Message)"
         $classLoaded = $false
     }
 
     if (-not $classLoaded) {
         try {
-            # Method 2: Fallback to dot-sourcing
-            . $classModulePath
-
-            # Verify the class is available by trying to get its type
-            $classType = [FileHashDatabase] -as [type]
-            if (-not $classType) {
-                throw "FileHashDatabase class not found after dot-sourcing"
-            }
-
-            Write-Verbose "FileHashDatabase class loaded via dot-sourcing"
+            # Method 2: Try Import-Module (PowerShell 5.1+)
+            Import-Module $classModulePath -Global -Force -Verbose:$false -ErrorAction Stop
+            Write-Verbose "FileHashDatabase class loaded via Import-Module"
             $classLoaded = $true
         } catch {
-            Write-Verbose "Dot-sourcing failed: $($_.Exception.Message)"
+            Write-Verbose "Import-Module failed: $($_.Exception.Message)"
             $classLoaded = $false
         }
     }
@@ -181,30 +181,30 @@ if (Test-Path $pauseIndicatorPath) {
     Write-Verbose "Loading PauseIndicator class from: $pauseIndicatorPath"
 
     try {
-        # Method 1: Try Import-Module (PowerShell 5.1+)
-        Import-Module $pauseIndicatorPath -Global -Force -Verbose:$false -ErrorAction Stop
-        Write-Verbose "PauseIndicator class loaded via Import-Module"
+        # Method 1: Try dot-sourcing (most reliable for classes)
+        . $pauseIndicatorPath
+
+        # Verify the class is available by trying to get its type
+        $classType = [PauseIndicator] -as [type]
+        if (-not $classType) {
+            throw "PauseIndicator class not found after dot-sourcing"
+        }
+
+        Write-Verbose "PauseIndicator class loaded via dot-sourcing"
         $pauseIndicatorLoaded = $true
     } catch {
-        Write-Verbose "Import-Module failed: $($_.Exception.Message)"
+        Write-Verbose "Dot-sourcing failed: $($_.Exception.Message)"
         $pauseIndicatorLoaded = $false
     }
 
     if (-not $pauseIndicatorLoaded) {
         try {
-            # Method 2: Fallback to dot-sourcing
-            . $pauseIndicatorPath
-
-            # Verify the class is available by trying to get its type
-            $classType = [PauseIndicator] -as [type]
-            if (-not $classType) {
-                throw "PauseIndicator class not found after dot-sourcing"
-            }
-
-            Write-Verbose "PauseIndicator class loaded via dot-sourcing"
+            # Method 2: Try Import-Module (PowerShell 5.1+)
+            Import-Module $pauseIndicatorPath -Global -Force -Verbose:$false -ErrorAction Stop
+            Write-Verbose "PauseIndicator class loaded via Import-Module"
             $pauseIndicatorLoaded = $true
         } catch {
-            Write-Verbose "Dot-sourcing failed: $($_.Exception.Message)"
+            Write-Verbose "Import-Module failed: $($_.Exception.Message)"
             $pauseIndicatorLoaded = $false
         }
     }

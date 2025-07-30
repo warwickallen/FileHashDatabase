@@ -4,6 +4,7 @@
 This prompt is activated by any of these phrases:
 - "commit staged"
 - "commit staged changes"
+- "commit the staged changes"
 
 ## Context
 You are committing staged changes to the FileHashDatabase repository using a commit message that follows the project's commit message guidelines.

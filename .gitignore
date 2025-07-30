@@ -3,4 +3,10 @@
 
 # Testing
 Tests/Artefacts
-test-results*.xml
+/debug*
+/test*
+PowerShell_transcript.*
+
+# Cursor
+CHAT_HISTORY*.md
+CHAT_SUMMARY*.md

@@ -232,6 +232,12 @@ function Move-FileHashDuplicate {
 
         # Initialise database
         try {
+            # Load the class if not already available
+            if (-not ([System.Management.Automation.PSTypeName]'FileHashDatabase').Type) {
+                $classPath = Join-Path $PSScriptRoot "..\Private\FileHashDatabase.ps1"
+                . $classPath
+            }
+
             $db = [FileHashDatabase]::new($DatabasePath)
         } catch {
             throw "Failed to initialise database at '$DatabasePath': $_"

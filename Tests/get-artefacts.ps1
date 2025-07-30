@@ -5,22 +5,6 @@ param(
     [string]$RunId
 )
 
-if ([string]::IsNullOrEmpty($RunId)) {
-    Write-Output "No run ID provided, searching for highest run folder in Tests/Artefacts"
-    $artefactsRoot = Join-Path $repoDir "Tests\Artefacts"
-    $runFolders = Get-ChildItem -Path $artefactsRoot -Directory -Filter 'run-*' | Where-Object { $_.Name -match '^run-\\d+$' }
-    if ($runFolders.Count -eq 0) {
-        throw "No run folders found in $artefactsRoot"
-    }
-    $highestRunFolder = $runFolders | Sort-Object { [int]($_.Name -replace '^run-', '') } -Descending | Select-Object -First 1
-    $RunId = $highestRunFolder.Name -replace '^run-', ''
-    Write-Output "Using highest run folder: $($highestRunFolder.Name) (RunId: $RunId)"
-}
-
-$artefacts = @(
-    'quick-validation-results'
-)
-
 # Find repository root directory
 $repoDir = Get-Location
 while (-not (Test-Path (Join-Path $repoDir ".git"))) {
@@ -29,6 +13,22 @@ while (-not (Test-Path (Join-Path $repoDir ".git"))) {
         throw "Could not find repository root directory"
     }
 }
+
+if ([string]::IsNullOrEmpty($RunId)) {
+    Write-Output "No run ID provided, searching for highest run folder in Tests/Artefacts"
+    $artefactsRoot = Join-Path $repoDir "Tests\Artefacts"
+    $runFolders = Get-ChildItem -Path $artefactsRoot -Directory -Filter 'run-*' | Where-Object { $_.Name -match '^run-\d+$' }
+    if ($runFolders.Count -eq 0) {
+        throw "No run folders found in $artefactsRoot"
+    }
+    $highestRunFolder = $runFolders | Sort-Object { [long]($_.Name -replace '^run-', '') } -Descending | Select-Object -First 1
+    $RunId = $highestRunFolder.Name -replace '^run-', ''
+    Write-Output "Using highest run folder: $($highestRunFolder.Name) (RunId: $RunId)"
+}
+
+$artefacts = @(
+    'quick-validation-results'
+)
 
 $artefactsDir = Join-Path $repoDir "Tests\Artefacts\run-$RunId"
 

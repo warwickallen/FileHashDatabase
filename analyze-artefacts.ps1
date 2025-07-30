@@ -138,8 +138,8 @@ if (Test-Path $analyzerResultsPath) {
 
 # Overall assessment
 Write-Output "=== Overall Assessment ==="
-$testSuccess = if ($script:errors -eq 0 -and $script:failures -eq 0) { $true } else { $false }
-$codeQuality = if ($script:totalIssues -eq 0) { $true } else { $false }
+$testSuccess = $script:errors -eq 0 -and $script:failures -eq 0
+$codeQuality = $script:totalIssues -eq 0
 
 if ($testSuccess -and $codeQuality) {
     Write-Output "[EXCELLENT] All tests passed and no code quality issues found."

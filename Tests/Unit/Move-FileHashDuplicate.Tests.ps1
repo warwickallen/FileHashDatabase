@@ -211,8 +211,14 @@ Describe "Function Parameter Validation" {
 
         It "Should handle WhatIf parameter" {
             # This should not throw an exception
-            $tempDbPath = Join-Path $script:TempDir "WhatIfTest_$(Get-Random).db"
-            { Move-FileHashDuplicate -DatabasePath $tempDbPath -Destination $script:StagingDir -Algorithm 'SHA256' -WhatIf } | Should -Not -Throw
+            # Use the current working directory for the database in CI environments
+            # This avoids temp directory permission issues
+            $dbPath = if ($env:CI) {
+                Join-Path (Get-Location) "WhatIfTest_$(Get-Random).db"
+            } else {
+                Join-Path $script:TempDir "WhatIfTest_$(Get-Random).db"
+            }
+            { Move-FileHashDuplicate -DatabasePath $dbPath -Destination $script:StagingDir -Algorithm 'SHA256' -WhatIf } | Should -Not -Throw
         }
     }
 }

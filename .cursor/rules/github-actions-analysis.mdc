@@ -1,0 +1,90 @@
+# FileHashDatabase - GitHub Actions Artefact Analysis Prompt
+
+## Trigger Phrases
+This prompt is activated by any of these phrases:
+- "fix artefacts"
+- "analyse artefacts"
+- "fix GitHub Actions"
+- "fix pipeline errors"
+- "fix test failures"
+- "analyse latest artefacts"
+- "fix all errors and warnings"
+
+## Context
+- You are analysing the latest GitHub Actions artefacts from `Tests/Artefacts/latest/` to identify and fix errors and warnings in the FileHashDatabase PowerShell module.
+- `Tests/Artefacts/latest/` is a symlink to the `Tests/Artefacts/run-*/` folder that was most recently download by the `Tests/get-artefacts.sh` script.
+
+## Project Overview
+- **Repository**: FileHashDatabase PowerShell module for Windows
+- **Location**: `src/FileHashDatabase.psm1` (main module)
+- **Public functions**: `src/Public/` directory
+- **Private functions**: `src/Private/` directory
+- **Tests**: `Tests/` directory (Unit and Integration)
+- **Language**: PowerShell 5.1+ with British English conventions
+
+## Artefact Analysis Instructions
+
+### 1. Analyse PSScriptAnalyzer Results (`analyzer-results.xml`)
+- Parse the XML file to extract all diagnostic records
+- Categorise by severity: ParseError, Error, Warning, Information
+- Identify file paths, line numbers, and specific issues
+- Focus on critical issues first (ParseError, Error)
+
+### 2. Analyse Unit Test Results (`unit-test-results.xml`)
+- Parse the NUnit XML format to extract test failures
+- Identify missing functions, import issues, and test failures
+- Note any assertion failures or unexpected exceptions
+
+### 3. Prioritise Issues
+1. **Critical**: Parse errors, missing functions, module import failures
+2. **High**: Test failures, function availability issues
+3. **Medium**: PSScriptAnalyzer warnings (Write-Host usage, etc.)
+4. **Low**: Style and best practice warnings
+
+## Fix Implementation Guidelines
+
+### Code Fixes
+- Follow PowerShell best practices
+- Maintain Windows compatibility
+- Use British English in comments and documentation
+- Apply minimal changes to resolve issues
+- Ensure functions are properly exported from the module
+
+### Test Fixes
+- Fix missing function tests by ensuring functions exist
+- Resolve module import issues
+- Update test expectations to match actual functionality
+- Maintain test coverage for existing functionality
+
+### Module Structure
+- Ensure `src/FileHashDatabase.psm1` properly imports and exports functions
+- Verify `src/FileHashDatabase.psd1` manifest is correct
+- Check function availability in `src/Public/` directory
+
+## Output Format
+Provide a structured analysis with:
+1. **Summary**: Total errors/warnings found
+2. **Critical Issues**: Parse errors and missing functions
+3. **Test Failures**: Specific test cases that need fixing
+4. **Recommended Actions**: Prioritised list of fixes needed
+5. **Code Changes**: Specific file modifications required
+
+## Example Usage
+When you see any of the trigger phrases above, automatically:
+1. Read and parse both XML files in `Tests/Artefacts/latest/`
+2. Analyse the current codebase structure
+3. Identify root causes of failures
+4. Propose specific fixes with code changes
+5. Ensure all changes follow the project's coding standards
+
+### Quick Commands
+Instead of the long sentence, you can now use:
+- `fix artefacts` - Quickest option
+- `analyse artefacts` - Alternative short command
+- `fix pipeline errors` - More specific about what to fix
+
+Remember: Focus on minimal, incremental changes that resolve the immediate issues without over-engineering solutions.
+description:
+globs:
+alwaysApply: false
+---

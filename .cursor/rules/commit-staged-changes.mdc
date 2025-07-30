@@ -1,0 +1,139 @@
+# Commit Staged Changes with Conventional Commits
+
+## Trigger Phrases
+This prompt is activated by any of these phrases:
+- "commit staged"
+- "commit staged changes"
+- "commit the staged changes"
+
+## Context
+You are committing staged changes to the FileHashDatabase repository using a commit message that follows the project's commit message guidelines.
+
+**Important**: PowerShell has specific requirements for handling newlines in commit messages. The helper script (`Scripts/commit-staged.ps1`) handles this automatically, but manual commits require careful attention to newline formatting.
+
+**Git Pager Note**: When running git commands that might invoke a pager (like `git log`, `git show`, `git diff`), use `git --no-pager` to prevent console errors and avoid manual interaction with the pager.
+
+## Commit Message Guidelines
+- **Format**: Follow [Conventional Commits 1.0.0](https://www.conventionalcommits.org/en/v1.0.0/)
+- **Header limit**: Maximum 50 characters (including the initial `<type>[optional scope]: `)
+- **Body line limit**: Maximum 72 characters per line
+- **Language**: British English
+- **Structure**: `<type>[optional scope]: <description>`
+
+## Conventional Commit Types
+- `feat`: A new feature
+- `fix`: A bug fix
+- `docs`: Documentation only changes
+- `style`: Changes that do not affect the meaning of the code (white-space, formatting, missing semi-colons, etc)
+- `refactor`: A code change that neither fixes a bug nor adds a feature
+- `perf`: A code change that improves performance
+- `test`: Adding missing tests or correcting existing tests
+- `chore`: Changes to the build process or auxiliary tools and libraries such as documentation generation
+
+## Workflow Instructions
+
+### Step 1: Check Staged Changes
+1. Check what files are currently staged for commit using `git --no-pager status`
+2. **IMPORTANT**: Only commit staged changes - do NOT stage additional files
+3. Analyse the nature of the changes (additions, modifications, deletions)
+4. Determine the appropriate commit type based on the changes
+
+### Step 2: Generate Commit Message
+1. **Determine type**: Based on the staged changes, select the appropriate conventional commit type
+2. **Optional scope**: Add scope if relevant (e.g., `feat(module)`, `fix(tests)`)
+3. **Description**: Write a clear, concise description in British English
+4. **Body**: If needed, add a detailed explanation with proper line wrapping:
+   - Use single `\n` for word-wrapped lines (to stay under 72 characters)
+   - Use `\n\n` only for intentional paragraph breaks
+   - Each line should be ≤ 72 characters
+5. **Footer**: Add any breaking changes, issue references, or co-authors if applicable
+
+### Step 3: Validate Commit Message
+1. Ensure header is ≤ 50 characters
+2. Ensure body lines are ≤ 72 characters
+3. Verify proper newline usage:
+   - Single `\n` for word-wrapped lines
+   - `\n\n` only for paragraph breaks
+4. Verify British English spelling and grammar
+5. Confirm conventional commit format compliance
+
+### Step 4: Execute Commit
+1. **Commit format for PowerShell**: Use exactly two `-m` parameters with actual line breaks:
+   - First `-m`: Header message (conventional commit format)
+   - Second `-m`: Complete body message with actual line breaks (not `\n` escape sequences)
+2. **PowerShell syntax**: Use here-string or actual line breaks in the string
+3. **Avoid multiple `-m` parameters** as they create unwanted blank lines
+4. **CRITICAL**: Only commit staged changes - do NOT use `git add` to stage additional files
+5. Verify the commit was successful
+6. Display the commit hash and summary
+
+## Output Format
+Provide:
+1. **Staged Files Summary**: List of files staged for commit
+2. **Change Analysis**: Type and nature of changes
+3. **Proposed Commit Message**: Full commit message following guidelines
+4. **Commit Execution**: Status of the commit operation
+5. **Commit Details**: Hash and summary of the created commit
+
+## Example Usage
+When you see any of the trigger phrases above, automatically:
+1. Check what files are staged using `git --no-pager status`
+2. **VERIFY**: Only staged changes will be committed - do NOT stage additional files
+3. Analyse the changes to determine the commit type
+4. Generate a conventional commit message following the guidelines
+5. Validate the message format and character limits
+6. **Execute commit with proper newline handling**:
+   - **Option 1**: Use the helper script: `.\Scripts\commit-staged.ps1 -Type "type" -Description "description" -Body "body"`
+   - **Option 2**: Use git commit with message file: Create a temp file with the message and use `git commit -F filename`
+   - **Option 3**: Use here-string with proper escaping: `git commit -m "header" -m @"
+body with actual line breaks
+and paragraph breaks
+"@`
+7. Confirm the commit was successful using `git --no-pager log --oneline -1`
+
+### Quick Commands
+Instead of manual git commands, you can now use:
+- `commit staged` - Quickest option
+- `commit staged changes` - Alternative short command
+
+### Helper Script
+For easier commit creation, use the helper script:
+- `.\Scripts\commit-staged.ps1 -Type "feat" -Description "add new feature" -Body "Detailed description"`
+- The script validates format and provides interactive confirmation
+
+## Example Commit Messages
+
+### Header Examples:
+- `feat: add new file hash validation function`
+- `fix(tests): resolve module import failures in unit tests`
+- `docs: update README with installation instructions`
+- `refactor: improve error handling in database operations`
+- `style: fix code formatting and indentation`
+- `test: add comprehensive test coverage for new functions`
+- `chore: update build scripts for PowerShell 5.1 compatibility`
+
+### Body Examples (PowerShell format):
+```
+Add comprehensive validation function for file hashes.
+
+This function validates SHA256 hashes and provides detailed error
+messages for invalid formats. Includes unit tests and documentation
+updates.
+```
+
+```
+Resolve module import failures in unit tests.
+
+Fixed missing function exports and updated test expectations to match
+actual module structure. All tests now pass successfully.
+```
+
+Remember: Always use British English spelling and ensure the commit message clearly describes the changes made.
+description: Commits staged changes with conventional commit messages following project guidelines
+globs:
+alwaysApply: false
+---
+description:
+globs:
+alwaysApply: false
+---

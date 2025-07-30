@@ -1,0 +1,12 @@
+# Vim
+**.sw[pqr]
+
+# Testing
+Tests/Artefacts
+/debug*
+/test*.*
+PowerShell_transcript.*
+
+# Cursor
+CHAT_HISTORY*.md
+CHAT_SUMMARY*.md

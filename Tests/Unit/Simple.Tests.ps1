@@ -17,20 +17,24 @@ BeforeAll {
     }
 
     # Basic environment check
-    Write-Host "PowerShell Version: $($PSVersionTable.PSVersion)"
-    Write-Host "Current Location: $(Get-Location)"
-    Write-Host "Test Script Root: $PSScriptRoot"
-    Write-Host "Repository Root: $(Split-Path $PSScriptRoot -Parent)"
-    Write-Host "Module Directory: $ModuleDirectory"
-    Write-Host "Module Path: $ModulePath"
-    Write-Host "Available Modules: $(Get-Module -ListAvailable | Where-Object Name -like '*FileHash*' | Select-Object -ExpandProperty Name)"
+    Write-Output "PowerShell Version: $($PSVersionTable.PSVersion)"
+    Write-Output "Current Location: $(Get-Location)"
+    Write-Output "Test Script Root: $PSScriptRoot"
+    Write-Output "Repository Root: $(Split-Path $PSScriptRoot -Parent)"
+    Write-Output "Module Directory: $ModuleDirectory"
+    Write-Output "Module Path: $ModulePath"
+    Write-Output "Available Modules: $(
+            Get-Module -ListAvailable |
+            Where-Object Name -like '*FileHash*' |
+            Select-Object -ExpandProperty Name
+        )"
 
     # Try to find and import the module
     if ($ModuleManifest -and (Test-Path $ModuleManifest.FullName)) {
-        Write-Host "Found module manifest: $($ModuleManifest.FullName)"
+        Write-Output "Found module manifest: $($ModuleManifest.FullName)"
         try {
             Import-Module $ModuleManifest.FullName -Force
-            Write-Host "Module imported successfully"
+            Write-Output "Module imported successfully"
         }
         catch {
             Write-Warning "Failed to import module: $($_.Exception.Message)"

@@ -1,0 +1,108 @@
+# Download and Analyse GitHub Actions Artefacts
+
+## Trigger Phrases
+This prompt is activated by any of these phrases:
+- "download and fix artefacts"
+- "get latest artefacts and fix"
+- "update artefacts and analyse"
+- "refresh artefacts and fix"
+- "pull latest and fix"
+- "sync artefacts and analyse"
+
+## Context
+You are downloading the latest GitHub Actions artefacts using the `Tests/get-artefacts.sh` script and then analysing them to identify and fix errors and warnings in the FileHashDatabase PowerShell module.
+
+## Project Overview
+- **Repository**: FileHashDatabase PowerShell module for Windows
+- **Location**: `src/FileHashDatabase.psm1` (main module)
+- **Public functions**: `src/Public/` directory
+- **Private functions**: `src/Private/` directory
+- **Tests**: `Tests/` directory (Unit and Integration)
+- **Language**: PowerShell 5.1+ with British English conventions
+
+## Workflow Instructions
+
+### Step 1: Download Latest Artefacts
+1. Determine the appropriate script based on the environment:
+   - **Windows PowerShell**: Use `Tests/get-artefacts.ps1`
+   - **Unix/Linux/macOS**: Use `Tests/get-artefacts.sh`
+2. Execute the appropriate script to download the latest GitHub Actions artefacts
+3. The script will:
+   - Get the latest run ID from GitHub Actions (or, if not available, use the run folder with the highest run number in `Tests/Artefacts`)
+   - Download artefacts to `Tests/Artefacts/run-{RUN_ID}/`
+   - (The 'latest' symlink is no longer created or used)
+4. Verify the download was successful
+
+### Step 2: Analyse PSScriptAnalyzer Results (`analyzer-results.xml`)
+- Parse the XML file to extract all diagnostic records
+- Categorise by severity: ParseError, Error, Warning, Information
+- Identify file paths, line numbers, and specific issues
+- Focus on critical issues first (ParseError, Error)
+
+### Step 3: Analyse Unit Test Results (`unit-test-results.xml`)
+- Parse the NUnit XML format to extract test failures
+- Identify missing functions, import issues, and test failures
+- Note any assertion failures or unexpected exceptions
+
+### Step 4: Prioritise Issues
+1. **Critical**: Parse errors, missing functions, module import failures
+2. **High**: Test failures, function availability issues
+3. **Medium**: PSScriptAnalyzer warnings (Write-Host usage, etc.)
+4. **Low**: Style and best practice warnings
+
+## Fix Implementation Guidelines
+
+### Code Fixes
+- Follow PowerShell best practices
+- Maintain Windows compatibility
+- Use British English in comments and documentation
+- Apply minimal changes to resolve issues
+- Ensure functions are properly exported from the module
+
+### Test Fixes
+- Fix missing function tests by ensuring functions exist
+- Resolve module import issues
+- Update test expectations to match actual functionality
+- Maintain test coverage for existing functionality
+
+### Module Structure
+- Ensure `src/FileHashDatabase.psm1` properly imports and exports functions
+- Verify `src/FileHashDatabase.psd1` manifest is correct
+- Check function availability in `src/Public/` directory
+
+## Output Format
+Provide a structured analysis with:
+1. **Download Summary**: Status of artefact download and run ID used
+2. **Summary**: Total errors/warnings found
+3. **Critical Issues**: Parse errors and missing functions
+4. **Test Failures**: Specific test cases that need fixing
+5. **Recommended Actions**: Prioritised list of fixes needed
+6. **Code Changes**: Specific file modifications required
+
+## Example Usage
+When you see any of the trigger phrases above, automatically:
+1. Determine the environment and execute the appropriate script:
+   - **Windows PowerShell**: `Tests/get-artefacts.ps1`
+   - **Unix/Linux/macOS**: `Tests/get-artefacts.sh`
+2. Verify the download was successful and note the run ID
+3. Read and parse both XML files in the selected `Tests/Artefacts/run-{RUN_ID}/` folder (if no run ID is specified, use the folder with the highest run number)
+4. Analyse the current codebase structure
+5. Identify root causes of failures
+6. Propose specific fixes with code changes
+7. Ensure all changes follow the project's coding standards
+
+### Quick Commands
+Instead of manual steps, you can now use:
+- `download and fix artefacts` - Downloads latest and analyses
+- `get latest artefacts and fix` - Alternative command
+- `refresh artefacts and fix` - Clear and concise
+
+Remember: Focus on minimal, incremental changes that resolve the immediate issues without over-engineering solutions.
+description: Downloads latest GitHub Actions artefacts and analyses them for errors and warnings
+globs:
+alwaysApply: false
+---
+description:
+globs:
+alwaysApply: false
+---

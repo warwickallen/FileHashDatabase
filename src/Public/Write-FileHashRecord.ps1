@@ -4,11 +4,11 @@
     SQLite.
 
 .DESCRIPTION
-    The Write-FileHashes function scans a specified directory and computes file hashes using the
-    specified algorithm (default SHA256). It displays a progress indicator with dots and handles
-    retries for failed hash computations. The function can pause between files, retry failed attempts,
-    and optionally halt on errors. File names are formatted to a specified display length for
-    consistent output.
+    The Write-FileHashRecord function scans a specified directory and computes file hashes using the
+    specified algorithm (default SHA256). It displays a pause indicator with dots and handles
+    retries for failed hash computations. The function can pause between files, retry failed
+    attempts, and optionally halt on errors. File names are formatted to a specified display length
+    for consistent output.
 
     Each file that has been attempted to be processed is logged to a SQLite database, including
     failed attempts. For failed hash attempts, the hash value is NULL. The database's default
@@ -31,8 +31,7 @@
     A glob-style filter. If defined, only files match the filter was be considered.
 
 .PARAMETER InterfilePauseSeconds
-    The number of seconds to pause between processing files. Must be a non-negative number. The
-    default is 20 seconds.
+    The number of seconds to pause between processing files. Must be a non-negative number.
 
 .PARAMETER RetryAttempts
     The number of retry attempts for computing a file's hash if it fails. Must be a non-negative
@@ -86,32 +85,33 @@
     Displays this help message and exits.
 
 .EXAMPLE
-    .\Write-FileHashes.ps1 -ScanDirectory "C:\Data" -InterfilePauseSeconds 10
-    Scans the "C:\Data" directory, computing SHA256 file hashes with a 10-second pause between files.
+    .\Write-FileHashRecord.ps1 -ScanDirectory "C:\Data" -InterfilePauseSeconds 10
+    Scans the "C:\Data" directory, computing SHA256 file hashes with a 10-second pause between
+    files.
 
 .EXAMPLE
-    .\Write-FileHashes.ps1 -HaltOnFailure $true -RetryAttempts 3 -Algorithm SHA512
+    .\Write-FileHashRecord.ps1 -HaltOnFailure $true -RetryAttempts 3 -Algorithm SHA512
     Scans the current directory with SHA512, stopping on any error, with 3 retry attempts for failed
     hash computations.
 
 .EXAMPLE
-    .\Write-FileHashes.ps1 -NoReprocess
+    .\Write-FileHashRecord.ps1 -NoReprocess
     Scans the current directory, skipping files whose path exists in the database.
 
 .EXAMPLE
-    .\Write-FileHashes.ps1 -RandomOrder
+    .\Write-FileHashRecord.ps1 -RandomOrder
     Scans the current directory and processes files in a random order.
 
 .EXAMPLE
-    .\Write-FileHashes.ps1 -Recurse
+    .\Write-FileHashRecord.ps1 -Recurse
     Scans the current directory and all subdirectories for files.
 
 .EXAMPLE
-    .\Write-FileHashes.ps1 -MaxFiles 100
+    .\Write-FileHashRecord.ps1 -MaxFiles 100
     Scans up to 100 files from the source.
 
 .EXAMPLE
-    .\Write-FileHashes.ps1 -Help
+    .\Write-FileHashRecord.ps1 -Help
     Displays the help message for the function.
 
 .NOTES
@@ -124,11 +124,15 @@
 if (-not (Get-Command -Name 'FileHashDatabase' -ErrorAction SilentlyContinue)) {
     . "$PSScriptRoot\..\Private\FileHashDatabase.ps1"
 }
+# Load the PauseIndicator class
+if (-not ([System.Management.Automation.PSTypeName]'PauseIndicator').Type) {
+    . "$PSScriptRoot\..\Private\PauseIndicator.ps1"
+}
 
-function Write-FileHashes {
-    [CmdletBinding()]
+function Write-FileHashRecord {
+    [CmdletBinding(DefaultParameterSetName='Normal')]
     param(
-        [Parameter(ParameterSetName='Normal', Mandatory=$true)]
+        [Parameter(ParameterSetName='Normal')]
         [Parameter(ParameterSetName='Reprocess')]
         [string]$ScanDirectory = (Get-Location).ToString(),
 
@@ -199,7 +203,7 @@ function Write-FileHashes {
     )
 
     if ($Help) {
-        Get-Help -Name Write-FileHashes
+        Get-Help -Name Write-FileHashRecord
         return
     }
 
@@ -217,8 +221,19 @@ function Write-FileHashes {
     $db = $null
     if (-not $NoSqliteLog -or $NoReprocess -or $ReprocessFailed) {
         try {
+            Write-Debug "Write-FileHashRecord initialising database with path: $DatabasePath"
+            # Load the class if not already available
+            if (-not ([System.Management.Automation.PSTypeName]'FileHashDatabase').Type) {
+                Write-Debug "Loading FileHashDatabase class"
+                $classPath = Join-Path $PSScriptRoot "..\Private\FileHashDatabase.ps1"
+                . $classPath
+            }
+
+            Write-Debug "Creating FileHashDatabase instance"
             $db = [FileHashDatabase]::new($DatabasePath)
+            Write-Debug "Database instance created successfully"
         } catch {
+            Write-Debug "Failed to initialise database object: $_"
             throw "Failed to initialise database object: $_"
         }
     }
@@ -257,9 +272,7 @@ function Write-FileHashes {
         $file_list = Get-ChildItem @params
     }
 
-    $ndots = 64
-    $dots = '.' * $ndots
-    $interdot_pause_ms = 1e3 * $InterfilePauseSeconds / $ndots
+    $indicator = [PauseIndicator]::new($InterfilePauseSeconds)
     $error_action = 'Continue'
     if ($HaltOnFailure) {
         $error_action = 'Stop'
@@ -276,37 +289,24 @@ function Write-FileHashes {
 
         $fname = $f.Name
         $hash = $null
-        $len = $fname.Length
-        if ($len -lt $FileNameDisplayLength) {
-            $padding_len = $FileNameDisplayLength - $len
-            $fname = $fname + (' ' * $padding_len)
-        } elseif ($len -gt $FileNameDisplayLength) {
-            $fname = $fname.Substring(0, ($FileNameDisplayLength - 9)) +
-                '...' + $fname.Substring($len - 6)
-        }
-        $now = Get-Date
-        $timestamp = $now.ToString('yyyyMMdd-hhmmss')
-        $str = "$timestamp  $fname  $dots"
-        Write-Host -NoNewline $str
+        $indicator.Start($fname)
 
         # If NoReprocess is set, check if this file's path already exists in the database
         if ($NoReprocess -and $db) {
             if ($db.FileExistsInDatabase($f.FullName)) {
-                Write-Host "$("`b" * 30) [Skipped, already processed]"
+                $indicator.Fail("[Skipped, already processed]")
                 continue
             }
         }
 
-        for ($i = $ndots; $i; $i--) {
-            Start-Sleep -Milliseconds $interdot_pause_ms
-            Write-Host -NoNewLine "`b `b"
-        }
+        $indicator.Animate()
         $attempts_remaining = 1 + $RetryAttempts
         $this_error = $null
         while ($attempts_remaining-- -and -not $hash.Length) {
             try {
                 $h = Get-FileHash -Path $f.FullName -Algorithm $Algorithm -ErrorAction Stop
-                $hash = $h.Hash.ToString()
+                $hash = $h.Hash.ToString().ToUpper()
+                Write-Debug "Computed hash for $($f.FullName): $hash (Algorithm: $Algorithm)"
             } catch {
                 $this_error = $_
                 $n = $RetryAttempts - $attempts_remaining
@@ -315,7 +315,7 @@ function Write-FileHashes {
                 Start-Sleep -Seconds $RetryDelaySeconds
             }
         }
-        Write-Host $hash
+        $indicator.Complete($hash)
         if ($this_error) {
             $msg = 'Cannot read the contents of "{0}"' -f $f.FullName
             Write-Error -Message $msg -ErrorAction $error_action
@@ -323,7 +323,17 @@ function Write-FileHashes {
 
         # Log to SQLite database if requested
         if (-not $NoSqliteLog -and $db) {
-            $db.LogFileHash($hash, $Algorithm, $f.FullName, $f.Length, $now)
+            try {
+                Write-Debug "Logging file hash to database: $($f.FullName)"
+                $db.LogFileHash($hash, $Algorithm, $f.FullName, $f.Length, (Get-Date))
+                Write-Debug "File hash logged successfully"
+            } catch {
+                Write-Debug "Failed to log file hash to database: $_"
+                Write-Error "Failed to log file hash to database: $_"
+                if ($HaltOnFailure) {
+                    throw
+                }
+            }
         }
 
         $processedCount++ # Increment processed file count (success or failure)

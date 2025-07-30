@@ -25,6 +25,7 @@ alwaysApply: true
 - Follow PowerShell best practices
 - Maintain Windows compatibility
 - Include comprehensive tests
+- Only use UTF-8 characters
 - Use British English in documentation, comments and commit messages
 - For commit messages:
   - Limit the header to a maximum of 50 characters

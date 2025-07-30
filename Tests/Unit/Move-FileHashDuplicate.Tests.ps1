@@ -119,11 +119,41 @@ BeforeAll {
         $script:SkipClassTests = $true
     }
 
-    # Set up cross-platform test paths
+    # Set up cross-platform test paths with robust temp directory handling
     if ($IsWindows) {
         $script:TestDrive = "C:\"
-        $script:StagingDir = Join-Path ([System.IO.Path]::GetTempPath()) "FileHashDatabase_Staging"
-        $script:TempDir = $env:TEMP
+
+        # Use a more reliable temp directory that works in both CI and local environments
+        $possibleTempDirs = @(
+            $env:TEMP,
+            $env:TMP,
+            [System.IO.Path]::GetTempPath(),
+            "C:\Windows\Temp",
+            "C:\Temp"
+        )
+
+        $script:TempDir = $null
+        foreach ($tempDir in $possibleTempDirs) {
+            if ($tempDir -and (Test-Path $tempDir) -and (Test-Path $tempDir -PathType Container)) {
+                # Test write permissions
+                try {
+                    $testFile = Join-Path $tempDir "test_write_$(Get-Random).tmp"
+                    New-Item -Path $testFile -ItemType File -Force | Out-Null
+                    Remove-Item -Path $testFile -Force
+                    $script:TempDir = $tempDir
+                    Write-Output "Using temp directory: $script:TempDir"
+                    break
+                } catch {
+                    Write-Output "Temp directory $tempDir not writable: $($_.Exception.Message)"
+                }
+            }
+        }
+
+        if (-not $script:TempDir) {
+            throw "Could not find a writable temp directory. Tried: $($possibleTempDirs -join ', ')"
+        }
+
+        $script:StagingDir = Join-Path $script:TempDir "FileHashDatabase_Staging"
     } else {
         $script:TestDrive = "/tmp"
         $script:StagingDir = "/tmp/FileHashDatabase_staging"

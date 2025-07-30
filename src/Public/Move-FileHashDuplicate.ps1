@@ -219,12 +219,12 @@ function Move-FileHashDuplicate {
         [switch]$Help
     )
 
-    if ($Help) {
-        Get-Help -Name Move-FileHashDuplicate
-        return
-    }
-
     begin {
+        if ($Help) {
+            Get-Help -Name Move-FileHashDuplicate
+            return
+        }
+
         # Initialise database
         try {
             $db = [FileHashDatabase]::new($DatabasePath)

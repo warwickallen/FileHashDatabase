@@ -344,3 +344,178 @@ Describe "Cross-Platform Compatibility" {
         Write-Output "Running on PowerShell version: $($PSVersionTable.PSVersion)"
     }
 }
+
+Describe "Inaccessible File Handling" -Skip:$script:SkipClassTests {
+    BeforeAll {
+        if ($script:SkipClassTests) { return }
+
+        # Set up test environment
+        $script:testDbPath = Join-Path $script:TempDir "InaccessibleFileTest_$(Get-Random).db"
+        $script:testRoot = Join-Path $script:TempDir "InaccessibleFileTest_$(Get-Random)"
+        $script:stagingDir = Join-Path $script:TempDir "InaccessibleFileStaging_$(Get-Random)"
+
+        # Create test directories
+        New-Item -Path $script:testRoot -ItemType Directory -Force | Out-Null
+        New-Item -Path $script:stagingDir -ItemType Directory -Force | Out-Null
+
+        # Create subdirectories for the three duplicate files
+        $script:subDir1 = Join-Path $script:testRoot "subdir1"
+        $script:subDir2 = Join-Path $script:testRoot "subdir2"
+        New-Item -Path $script:subDir1 -ItemType Directory -Force | Out-Null
+        New-Item -Path $script:subDir2 -ItemType Directory -Force | Out-Null
+
+        # Create three files with identical content
+        $script:duplicateContent = "This is identical content for testing duplicate detection with inaccessible files."
+
+        $script:file1 = Join-Path $script:testRoot "duplicate1.txt"
+        $script:file2 = Join-Path $script:subDir1 "duplicate2.txt"
+        $script:file3 = Join-Path $script:subDir2 "duplicate3.txt"
+
+        # Create the files
+        $script:duplicateContent | Out-File -FilePath $script:file1 -Encoding UTF8 -Force
+        $script:duplicateContent | Out-File -FilePath $script:file2 -Encoding UTF8 -Force
+        $script:duplicateContent | Out-File -FilePath $script:file3 -Encoding UTF8 -Force
+
+        Write-Output "Created test environment:"
+        Write-Output "  Database: $script:testDbPath"
+        Write-Output "  Test root: $script:testRoot"
+        Write-Output "  Staging: $script:stagingDir"
+        Write-Output "  Files: $script:file1, $script:file2, $script:file3"
+    }
+
+    AfterAll {
+        if ($script:SkipClassTests) { return }
+
+        # Clean up test files and directories
+        if (Test-Path $script:testRoot) {
+            Remove-Item -Path $script:testRoot -Recurse -Force -ErrorAction SilentlyContinue
+        }
+        if (Test-Path $script:stagingDir) {
+            Remove-Item -Path $script:stagingDir -Recurse -Force -ErrorAction SilentlyContinue
+        }
+        if (Test-Path $script:testDbPath) {
+            Remove-Item -Path $script:testDbPath -Force -ErrorAction SilentlyContinue
+        }
+    }
+
+    BeforeEach {
+        if ($script:SkipClassTests) { return }
+
+        # Clear and recreate test files to ensure clean state
+        $script:duplicateContent | Out-File -FilePath $script:file1 -Encoding UTF8 -Force
+        $script:duplicateContent | Out-File -FilePath $script:file2 -Encoding UTF8 -Force
+        $script:duplicateContent | Out-File -FilePath $script:file3 -Encoding UTF8 -Force
+
+        # Clear staging directory
+        if (Test-Path $script:stagingDir) {
+            Remove-Item -Path $script:stagingDir -Recurse -Force -ErrorAction SilentlyContinue
+            New-Item -Path $script:stagingDir -ItemType Directory -Force | Out-Null
+        }
+
+        # Clear the database to ensure clean state for each test
+        if (Test-Path $script:testDbPath) {
+            Remove-Item -Path $script:testDbPath -Force -ErrorAction SilentlyContinue
+        }
+
+        # Re-record all three files in the database
+        Write-FileHashRecord -ScanDirectory $script:testRoot -DatabasePath $script:testDbPath -InterfilePauseSeconds 0 -Recurse
+    }
+
+    It "Should preserve at least one accessible file when some files become inaccessible" {
+        # Verify initial state - all three files should exist
+        Test-Path $script:file1 | Should -Be $true -Because "File 1 should exist initially"
+        Test-Path $script:file2 | Should -Be $true -Because "File 2 should exist initially"
+        Test-Path $script:file3 | Should -Be $true -Because "File 3 should exist initially"
+
+        # Verify all three files are recorded in the database
+        $hashRecords = Get-FileHashRecord -DatabasePath $script:testDbPath
+        $hashRecords | Should -Not -BeNullOrEmpty -Because "Should have hash records"
+        $hashRecords.Count | Should -Be 3 -Because "Should have 3 files recorded"
+
+        # Simulate file deletion by removing one file from the file system
+        # Keep its database record intact
+        Remove-Item -Path $script:file2 -Force
+        Test-Path $script:file2 | Should -Be $false -Because "File 2 should be deleted"
+
+        # Run Move-FileHashDuplicate on the remaining accessible files
+        { Move-FileHashDuplicate -DatabasePath $script:testDbPath -Destination $script:stagingDir -InterfilePauseSeconds 0 } | Should -Not -Throw
+
+        # Verify that exactly one file remains in its original location
+        $remainingFiles = @()
+        if (Test-Path $script:file1) { $remainingFiles += $script:file1 }
+        if (Test-Path $script:file2) { $remainingFiles += $script:file2 }
+        if (Test-Path $script:file3) { $remainingFiles += $script:file3 }
+
+        $remainingFiles.Count | Should -Be 1 -Because "Exactly one file should remain in its original location"
+
+        # Verify that exactly one file was moved to the staging directory
+        $movedFiles = Get-ChildItem -Path $script:stagingDir -Recurse -File
+        $movedFiles.Count | Should -Be 1 -Because "Exactly one file should be moved to staging"
+
+        # Verify the inaccessible file was not moved (it should be skipped)
+        $movedFilePaths = $movedFiles | ForEach-Object { $_.FullName }
+        $movedFilePaths | Should -Not -Contain $script:file2 -Because "The inaccessible file should not be moved"
+
+        Write-Output "Test completed successfully:"
+        Write-Output "  - Files remaining in original location: $($remainingFiles.Count)"
+        Write-Output "  - Files moved to staging: $($movedFiles.Count)"
+        Write-Output "  - Inaccessible file correctly skipped"
+    }
+
+    It "Should handle multiple inaccessible files correctly" {
+        # Verify initial state
+        Test-Path $script:file1 | Should -Be $true
+        Test-Path $script:file2 | Should -Be $true
+        Test-Path $script:file3 | Should -Be $true
+
+        # Delete two files, leaving only one accessible
+        Remove-Item -Path $script:file1 -Force
+        Remove-Item -Path $script:file2 -Force
+        Test-Path $script:file1 | Should -Be $false
+        Test-Path $script:file2 | Should -Be $false
+        Test-Path $script:file3 | Should -Be $true
+
+        # Run Move-FileHashDuplicate
+        { Move-FileHashDuplicate -DatabasePath $script:testDbPath -Destination $script:stagingDir -InterfilePauseSeconds 0 } | Should -Not -Throw
+
+        # Verify that the accessible file remains in its original location
+        Test-Path $script:file3 | Should -Be $true -Because "The accessible file should remain in its original location"
+
+        # Verify that no files were moved to staging (since there's only one accessible file)
+        $movedFiles = Get-ChildItem -Path $script:stagingDir -Recurse -File
+        $movedFiles.Count | Should -Be 0 -Because "No files should be moved when only one accessible file remains"
+
+        Write-Output "Test completed successfully:"
+        Write-Output "  - Single accessible file preserved in original location"
+        Write-Output "  - No files moved to staging (no duplicates to move)"
+    }
+
+    It "Should preserve the correct file based on PreserveBy parameter when files are inaccessible" {
+        # Verify initial state
+        Test-Path $script:file1 | Should -Be $true
+        Test-Path $script:file2 | Should -Be $true
+        Test-Path $script:file3 | Should -Be $true
+
+        # Delete one file to make it inaccessible
+        Remove-Item -Path $script:file1 -Force
+        Test-Path $script:file1 | Should -Be $false
+
+        # Run Move-FileHashDuplicate with LongestName preservation
+        { Move-FileHashDuplicate -DatabasePath $script:testDbPath -Destination $script:stagingDir -PreserveBy LongestName -InterfilePauseSeconds 0 } | Should -Not -Throw
+
+        # Verify that exactly one file remains in its original location
+        $remainingFiles = @()
+        if (Test-Path $script:file2) { $remainingFiles += $script:file2 }
+        if (Test-Path $script:file3) { $remainingFiles += $script:file3 }
+
+        $remainingFiles.Count | Should -Be 1 -Because "Exactly one accessible file should remain"
+
+        # Verify that exactly one file was moved to staging
+        $movedFiles = Get-ChildItem -Path $script:stagingDir -Recurse -File
+        $movedFiles.Count | Should -Be 1 -Because "Exactly one file should be moved to staging"
+
+        Write-Output "Test completed successfully:"
+        Write-Output "  - One accessible file preserved in original location"
+        Write-Output "  - One accessible file moved to staging"
+    }
+}

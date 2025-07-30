@@ -127,7 +127,7 @@ if (-not (Get-Command -Name 'FileHashDatabase' -ErrorAction SilentlyContinue)) {
 }
 
 function Write-FileHashRecord {
-    [CmdletBinding()]
+    [CmdletBinding(DefaultParameterSetName='Normal')]
     param(
         [Parameter(ParameterSetName='Normal')]
         [Parameter(ParameterSetName='Reprocess')]

@@ -232,6 +232,15 @@ class FileHashDatabase {
                 throw "Cannot determine database directory from path: $dbPath"
             }
 
+            # Resolve the directory path to handle CI environment path issues
+            try {
+                $resolvedDbDir = (Resolve-Path -Path $dbDir -ErrorAction Stop).Path
+                Write-Debug "Resolved database directory: $resolvedDbDir"
+                $dbDir = $resolvedDbDir
+            } catch {
+                Write-Debug "Could not resolve database directory path, using original: $dbDir"
+            }
+
             if (!(Test-Path $dbDir)) {
                 Write-Debug "Creating database directory: $dbDir"
                 try {
@@ -242,13 +251,16 @@ class FileHashDatabase {
                 }
             }
 
-            # Check directory permissions
+            # Check directory permissions with more robust error handling
             try {
                 $testFile = Join-Path $dbDir "test_permissions.tmp"
                 New-Item -Path $testFile -ItemType File -Force | Out-Null
                 Remove-Item -Path $testFile -Force
+                Write-Debug "Successfully tested write permissions in: $dbDir"
             } catch {
-                throw "Cannot write to database directory '$dbDir'. Check permissions: $($_.Exception.Message)"
+                $errorMsg = $_.Exception.Message
+                Write-Debug "Failed to write test file to directory: $errorMsg"
+                throw "Cannot write to database directory. Check permissions: $errorMsg"
             }
         } catch {
             Write-Debug "Failed to prepare database directory: $_"
